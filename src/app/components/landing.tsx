@@ -3,7 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-export function FloatingDots({ count = 70, minSize = 4, maxSize = 8, opacity = 0.7 }) {
+export function FloatingDots({ count = 70, minSize = 4, maxSize = 8, opacity = 0.7, minDuration = 3, maxDuration = 7 }) {
   const DOTS = Array.from({ length: count });
   function getRandom(min: number, max: number) {
     return Math.random() * (max - min) + min;
@@ -14,8 +14,8 @@ export function FloatingDots({ count = 70, minSize = 4, maxSize = 8, opacity = 0
         const size = getRandom(minSize, maxSize);
         const left = getRandom(0, 100);
         const top = getRandom(0, 100);
-        const duration = getRandom(8, 18);
-        const delay = getRandom(0, 10);
+        const duration = getRandom(minDuration, maxDuration); // Faster
+        const delay = getRandom(0, 4); // Shorter delay
         const floatY = getRandom(30, 80);
         return (
           <motion.div

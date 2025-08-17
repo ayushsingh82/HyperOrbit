@@ -17,8 +17,8 @@ export default function RegisterDaoPage() {
 
   return (
     <div className="flex flex-col items-center w-full min-h-screen bg-black py-16 px-4 relative overflow-hidden">
-      <FloatingDots />
-      <h1 className="text-2xl sm:text-5xl font-medium mb-6 text-[#27FEE0] text-center tracking-wide">
+      <FloatingDots minDuration={3} maxDuration={7} />
+      <h1 className="text-2xl sm:text-3xl font-medium mb-6 text-[#27FEE0] text-center tracking-wide">
         <span className="text-white">Register</span> DAO
       </h1>
       <form className="w-full max-w-lg bg-[#0B1614]/90 border border-[#27FEE0]/50 rounded-2xl p-8 flex flex-col gap-6 shadow-lg z-10">
