@@ -32,6 +32,7 @@ export default function GroupChatPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const emojis = ["😀", "😂", "🤔", "👍", "🎉", "🚀", "💡", "🔥", "💎", "📈", "🎯", "⚡"];
 
@@ -56,6 +57,33 @@ export default function GroupChatPage() {
   function addEmoji(emoji: string) {
     setInput(prev => prev + emoji);
     setShowEmojiPicker(false);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type.startsWith('image/')) {
+        // Handle image file
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setMessages(msgs => [...msgs, {
+            id: msgs.length + 1,
+            user: "You",
+            avatar: selectedAvatar,
+            text: `📷 Image: ${file.name}`,
+          }]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // Handle other file types
+        setMessages(msgs => [...msgs, {
+          id: msgs.length + 1,
+          user: "You",
+          avatar: selectedAvatar,
+          text: `📎 File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
+        }]);
+      }
+    }
   }
 
   function startRecording() {
@@ -157,14 +185,22 @@ export default function GroupChatPage() {
       {/* Enhanced Message Input */}
       <form onSubmit={handleSend} className="w-full max-w-2xl">
         <div className="flex gap-2 mb-2">
-          {/* Avatar Picker Button */}
+          {/* File/Image Upload Button */}
           <button
             type="button"
-            onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+            onClick={() => fileInputRef.current?.click()}
             className="px-3 py-2 rounded-lg border border-[#27FEE0]/40 text-[#27FEE0] hover:border-[#27FEE0] transition"
+            title="Upload file or image"
           >
-            👤
+            📎
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.doc,.docx,.txt"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
           
           {/* Emoji Picker Button */}
           <button
