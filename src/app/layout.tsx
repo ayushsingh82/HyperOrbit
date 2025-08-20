@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import React from "react";
-import Link from "next/link";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,10 +21,15 @@ export const metadata: Metadata = {
 function TopBar() {
   return (
     <div className="w-full flex justify-between items-center px-8 py-6 z-10 relative">
-      <span className="text-2xl font-bold text-[#27FEE0] tracking-tight select-none"><Link href="/">Privy.hl</Link></span>
-      <button className="px-6 py-2 rounded-lg border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-base transition hover:bg-[#27FEE0] hover:text-[#0B1614]">
-        Connect Wallet
-      </button>
+      <span className="text-2xl font-bold text-[#27FEE0] tracking-tight select-none">Privy.hl</span>
+      <div className="flex items-center gap-6">
+        <a href="/register" className="text-white/80 hover:text-[#27FEE0] transition font-medium text-sm">Register DAO</a>
+        <a href="/dao" className="text-white/80 hover:text-[#27FEE0] transition font-medium text-sm">Explore DAO</a>
+        <a href="/group" className="text-white/80 hover:text-[#27FEE0] transition font-medium text-sm">Group</a>
+        <button className="px-6 py-2 rounded-lg border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-base transition hover:bg-[#27FEE0] hover:text-[#0B1614]">
+          Connect Wallet
+        </button>
+      </div>
     </div>
   );
 }
