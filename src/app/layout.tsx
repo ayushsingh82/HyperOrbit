@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import React from "react";
+import Providers from "./providers";
+import PrivyWalletButton from "./components/PrivyWalletButton";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,9 +32,7 @@ function TopBar() {
         <a href="/group" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Group</a>
       </div>
       
-      <button className="px-6 py-2 rounded-lg border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-base transition hover:bg-[#27FEE0] hover:text-[#0B1614]">
-        Connect Wallet
-      </button>
+      <PrivyWalletButton />
     </div>
   );
 }
@@ -55,9 +55,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black min-h-screen flex flex-col`}
       >
-        <TopBar />
-        <main className="flex-1 flex flex-col">{children}</main>
-        <Footer />
+        <Providers>
+          <TopBar />
+          <main className="flex-1 flex flex-col">{children}</main>
+          <Footer />
+        </Providers>
       </body>
     </html>
   );
