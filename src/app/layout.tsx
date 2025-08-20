@@ -21,15 +21,18 @@ export const metadata: Metadata = {
 function TopBar() {
   return (
     <div className="w-full flex justify-between items-center px-8 py-6 z-10 relative">
-      <span className="text-2xl font-bold text-[#27FEE0] tracking-tight select-none">Privy.hl</span>
-      <div className="flex items-center gap-6">
-        <a href="/register" className="text-white/80 hover:text-[#27FEE0] transition font-medium text-sm">Register DAO</a>
-        <a href="/dao" className="text-white/80 hover:text-[#27FEE0] transition font-medium text-sm">Explore DAO</a>
-        <a href="/group" className="text-white/80 hover:text-[#27FEE0] transition font-medium text-sm">Group</a>
-        <button className="px-6 py-2 rounded-lg border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-base transition hover:bg-[#27FEE0] hover:text-[#0B1614]">
-          Connect Wallet
-        </button>
+      <a href="/" className="text-2xl font-bold text-[#27FEE0] tracking-tight select-none hover:text-white transition-colors cursor-pointer">Privy.hl</a>
+      
+      {/* Centered Navigation */}
+      <div className="flex items-center gap-4">
+        <a href="/register" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Register DAO</a>
+        <a href="/dao" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Explore DAO</a>
+        <a href="/group" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Group</a>
       </div>
+      
+      <button className="px-6 py-2 rounded-lg border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-base transition hover:bg-[#27FEE0] hover:text-[#0B1614]">
+        Connect Wallet
+      </button>
     </div>
   );
 }

@@ -3,34 +3,28 @@ import React, { useState } from "react";
 
 const DAOS = [
   {
-    name: "alpha.hl",
-    description: "Alpha DAO is pioneering decentralized governance for creators.",
-    members: 128,
-    image: "https://api.dicebear.com/7.x/identicon/svg?seed=alpha",
+    name: "ETH.hl",
+    description: "Ethereum community discussing DeFi, smart contracts, and ETH ecosystem developments.",
+    members: 1247,
+    image: "https://api.dicebear.com/7.x/identicon/svg?seed=eth",
   },
   {
-    name: "beta.hl",
-    description: "Beta DAO empowers communities to build together.",
-    members: 87,
-    image: "https://api.dicebear.com/7.x/identicon/svg?seed=beta",
+    name: "SOL.hl",
+    description: "Solana community focused on high-speed transactions and DeFi innovations.",
+    members: 892,
+    image: "https://api.dicebear.com/7.x/identicon/svg?seed=sol",
   },
   {
-    name: "gamma.hl",
-    description: "Gamma DAO is focused on open-source innovation.",
-    members: 203,
-    image: "https://api.dicebear.com/7.x/identicon/svg?seed=gamma",
+    name: "HYPE.hl",
+    description: "Hypercore community exploring next-gen trading and order execution systems.",
+    members: 456,
+    image: "https://api.dicebear.com/7.x/identicon/svg?seed=hyoe",
   },
   {
-    name: "delta.hl",
-    description: "Delta DAO supports social impact projects worldwide.",
-    members: 54,
-    image: "https://api.dicebear.com/7.x/identicon/svg?seed=delta",
-  },
-  {
-    name: "omega.hl",
-    description: "Omega DAO is a hub for blockchain enthusiasts.",
-    members: 312,
-    image: "https://api.dicebear.com/7.x/identicon/svg?seed=omega",
+    name: "BTC.hl",
+    description: "Bitcoin community discussing market trends, adoption, and BTC ecosystem.",
+    members: 2034,
+    image: "https://api.dicebear.com/7.x/identicon/svg?seed=btc",
   },
 ];
 
@@ -40,13 +34,34 @@ function JoinModal({ open, dao, onConfirm, onCancel }: {
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const [inputName, setInputName] = useState("");
+
   if (!open || !dao) return null;
+
+  const fullName = inputName.trim() ? `${inputName}.${dao.name}` : `yourname.${dao.name}`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-[#0B1614] border border-[#27FEE0] rounded-2xl p-8 max-w-xs w-full flex flex-col items-center shadow-2xl">
+      <div className="bg-[#0B1614] border border-[#27FEE0] rounded-2xl p-8 max-w-sm w-full flex flex-col items-center shadow-2xl">
         <img src={dao.image} alt={dao.name} className="w-16 h-16 rounded-full border border-[#27FEE0] mb-4" />
         <h2 className="text-xl font-bold text-[#27FEE0] mb-2 text-center">Join {dao.name}?</h2>
-        <p className="text-white/80 text-center mb-6 text-sm">You are joining <span className="font-semibold">{dao.name}</span>. Are you sure?</p>
+        
+        {/* Name Input */}
+        <div className="w-full mb-4">
+          <label className="block text-[#27FEE0] font-semibold text-sm mb-2 text-center">Choose your name</label>
+          <input
+            type="text"
+            value={inputName}
+            onChange={(e) => setInputName(e.target.value)}
+            placeholder="Enter your name"
+            className="w-full rounded-lg px-4 py-2 bg-black/80 border border-[#27FEE0]/40 text-white focus:outline-none focus:border-[#27FEE0] transition text-center"
+          />
+        </div>
+        
+        <p className="text-white/80 text-center mb-6 text-sm">
+          You will join as: <span className="font-semibold text-[#27FEE0]">{fullName}</span>
+        </p>
+        
         <div className="flex gap-4 w-full justify-center">
           <button
             className="px-5 py-2 rounded-lg border-2 border-[#27FEE0] bg-[#27FEE0] text-[#0B1614] font-bold text-base transition hover:bg-transparent hover:text-[#27FEE0] w-28"
@@ -55,7 +70,7 @@ function JoinModal({ open, dao, onConfirm, onCancel }: {
             Confirm
           </button>
           <button
-            className="px-5 py-2 rounded-lg border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-base transition hover:bg-[#27FEE0] hover:text-[#0B1614] w-28"
+            className="px-5 py-2 rounded-lg border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-base transition hover:bg-transparent hover:text-[#27FEE0] w-28"
             onClick={onCancel}
           >
             Cancel
