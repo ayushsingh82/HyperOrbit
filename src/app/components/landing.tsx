@@ -1,47 +1,70 @@
 'use client';
 
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 
 export function FloatingDots({ count = 70, minSize = 4, maxSize = 8, opacity = 0.7, minDuration = 3, maxDuration = 7 }) {
-  const DOTS = Array.from({ length: count });
-  function getRandom(min: number, max: number) {
-    return Math.random() * (max - min) + min;
+  const [isClient, setIsClient] = useState(false);
+
+  // Only render after hydration to avoid SSR/client mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Create a seeded random function for consistent values
+  const seededRandom = (seed: number) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
+
+  // Generate stable dot properties using useMemo
+  const dots = useMemo(() => {
+    if (!isClient) return [];
+    
+    return Array.from({ length: count }, (_, i) => {
+      const seed = i * 1000; // Use index as base seed
+      const size = seededRandom(seed + 1) * (maxSize - minSize) + minSize;
+      const left = seededRandom(seed + 2) * 100;
+      const top = seededRandom(seed + 3) * 100;
+      const duration = seededRandom(seed + 4) * (maxDuration - minDuration) + minDuration;
+      const delay = seededRandom(seed + 5) * 4;
+      const floatY = seededRandom(seed + 6) * 50 + 30;
+      
+      return { size, left, top, duration, delay, floatY };
+    });
+  }, [isClient, count, minSize, maxSize, minDuration, maxDuration]);
+
+  // Don't render anything during SSR
+  if (!isClient) {
+    return <div className="fixed inset-0 pointer-events-none z-0" />;
   }
+
   return (
     <div className="fixed inset-0 pointer-events-none z-0">
-      {DOTS.map((_, i) => {
-        const size = getRandom(minSize, maxSize);
-        const left = getRandom(0, 100);
-        const top = getRandom(0, 100);
-        const duration = getRandom(minDuration, maxDuration);
-        const delay = getRandom(0, 4);
-        const floatY = getRandom(30, 80);
-        return (
-          <motion.div
-            key={i}
-            initial={{ y: 0, opacity }}
-            animate={{ y: [0, -floatY, 0], opacity: [opacity, 1, opacity] }}
-            transition={{
-              repeat: Infinity,
-              duration,
-              delay,
-              ease: "easeInOut",
-            }}
-            style={{
-              position: "absolute",
-              left: `${left}%`,
-              top: `${top}%`,
-              width: size,
-              height: size,
-              borderRadius: "50%",
-              background: "#27FEE0",
-              opacity,
-              zIndex: 0,
-            }}
-          />
-        );
-      })}
+      {dots.map((dot, i) => (
+        <motion.div
+          key={i}
+          initial={{ y: 0, opacity }}
+          animate={{ y: [0, -dot.floatY, 0], opacity: [opacity, 1, opacity] }}
+          transition={{
+            repeat: Infinity,
+            duration: dot.duration,
+            delay: dot.delay,
+            ease: "easeInOut",
+          }}
+          style={{
+            position: "absolute",
+            left: `${dot.left}%`,
+            top: `${dot.top}%`,
+            width: `${dot.size}px`,
+            height: `${dot.size}px`,
+            borderRadius: "50%",
+            background: "#27FEE0",
+            opacity,
+            zIndex: 0,
+          }}
+        />
+      ))}
     </div>
   );
 }
