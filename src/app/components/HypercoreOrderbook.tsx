@@ -101,7 +101,7 @@ export default function HypercoreOrderbook() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chart' | 'orderbook' | 'trades' | 'depth'>('chart');
   const [chartTimeframe, setChartTimeframe] = useState<'1m' | '5m' | '1h' | '1d'>('1h');
-  const [chartType, setChartType] = useState<'line' | 'candle' | 'depth'>('candle');
+  const [chartType, setChartType] = useState<'line' | 'candle' | 'depth'>('line');
   const [lastPrice, setLastPrice] = useState<number>(0);
   const [priceChange, setPriceChange] = useState<'up' | 'down' | 'none'>('none');
   
@@ -117,7 +117,7 @@ export default function HypercoreOrderbook() {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastUpdateTimeRef = useRef<number>(0);
-  const orderBookUpdateThrottle = 500; // Throttle orderbook updates to 500ms
+  const orderBookUpdateThrottle = 2000; // Increased throttle to 2 seconds
 
   // Real-time WebSocket connection
   const connectWebSocket = useCallback(() => {
@@ -165,9 +165,22 @@ export default function HypercoreOrderbook() {
     }
   }, [selectedCoin]);
 
-  // Handle WebSocket messages for real-time updates
+  // Handle WebSocket messages for real-time updates with throttling
   const handleWebSocketMessage = useCallback((data: any) => {
+    const now = Date.now();
+    
     if (data.channel === 'l2Book' && data.data?.coin === selectedCoin) {
+      // Throttle orderbook updates to prevent excessive re-renders
+      if (now - lastUpdateTimeRef.current < orderBookUpdateThrottle) {
+        if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+        updateTimeoutRef.current = setTimeout(() => {
+          handleWebSocketMessage(data);
+        }, orderBookUpdateThrottle - (now - lastUpdateTimeRef.current));
+        return;
+      }
+      
+      lastUpdateTimeRef.current = now;
+      
       // Update orderbook without full refresh
       setOrderbook(prev => {
         if (!prev) return data.data;
@@ -191,10 +204,10 @@ export default function HypercoreOrderbook() {
     }
     
     if (data.channel === 'trades' && data.data?.coin === selectedCoin) {
-      // Add new trades to recent trades
+      // Add new trades to recent trades (less throttling for trades)
       const newTrades = data.data.map((trade: any, index: number) => ({
         id: `${Date.now()}-${index}`,
-        time: trade.time,
+        time: trade.time || Date.now(),
         price: parseFloat(trade.px),
         size: parseFloat(trade.sz),
         side: trade.side
@@ -202,7 +215,7 @@ export default function HypercoreOrderbook() {
       
       setRecentTrades(prev => [...newTrades, ...prev].slice(0, 50));
     }
-  }, [selectedCoin, lastPrice]);
+  }, [selectedCoin, lastPrice, orderBookUpdateThrottle]);
 
   // Update depth chart data from orderbook
   const updateDepthData = useCallback((orderbook: Orderbook) => {
@@ -281,10 +294,28 @@ export default function HypercoreOrderbook() {
     }
   }, []);
 
-  // Fetch chart data
-  const fetchChartData = useCallback(async (coin: string, timeframe: string) => {
+  // Fetch chart data with smart caching - only refresh when explicitly called
+  const fetchChartData = useCallback(async (coin: string, timeframe: string, forceRefresh = false) => {
+    const cacheKey = `${coin}-${timeframe}`;
+    const lastFetch = sessionStorage.getItem(`lastChartFetch-${cacheKey}`);
+    const cachedData = sessionStorage.getItem(`chartData-${cacheKey}`);
+    const now = Date.now();
+    
+    // Use cache if data exists and force refresh is not requested and less than 30 seconds have passed
+    if (!forceRefresh && lastFetch && cachedData && now - parseInt(lastFetch) < 30000) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        setCandleData(parsed);
+        return;
+      } catch (e) {
+        // If cache is corrupted, continue with fresh fetch
+      }
+    }
+    
     try {
       setChartLoading(true);
+      sessionStorage.setItem(`lastChartFetch-${cacheKey}`, now.toString());
+      
       const response = await fetch('https://api.hyperliquid.xyz/info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -300,7 +331,7 @@ export default function HypercoreOrderbook() {
 
       if (response.ok) {
         const data = await response.json();
-        if (data && Array.isArray(data)) {
+        if (data && Array.isArray(data) && data.length > 0) {
           const formattedData = data.map((candle: any) => ({
             time: candle.t,
             open: parseFloat(candle.o),
@@ -310,30 +341,23 @@ export default function HypercoreOrderbook() {
             volume: parseFloat(candle.v || '0')
           }));
           setCandleData(formattedData);
+          // Cache the successful data
+          sessionStorage.setItem(`chartData-${cacheKey}`, JSON.stringify(formattedData));
         }
       }
     } catch (err) {
       console.error('Error fetching chart data:', err);
-      // Generate mock data for demo
-      const mockData = Array.from({ length: 24 }, (_, i) => {
-        const basePrice = 65000;
-        const variation = Math.random() * 1000 - 500;
-        return {
-          time: Date.now() - (24 - i) * 60 * 60 * 1000,
-          open: basePrice + variation,
-          high: basePrice + variation + Math.random() * 500,
-          low: basePrice + variation - Math.random() * 500,
-          close: basePrice + variation + (Math.random() * 200 - 100),
-          volume: Math.random() * 1000000
-        };
-      });
-      setCandleData(mockData);
     } finally {
       setChartLoading(false);
     }
   }, []);
 
-  // Fetch recent trades
+  // Manual refresh function - forces fresh data
+  const refreshChart = useCallback(() => {
+    fetchChartData(selectedCoin, chartTimeframe, true);
+  }, [selectedCoin, chartTimeframe, fetchChartData]);
+
+  // Fetch recent trades with caching
   const fetchRecentTrades = useCallback(async (coin: string) => {
     try {
       const response = await fetch('https://api.hyperliquid.xyz/info', {
@@ -348,27 +372,61 @@ export default function HypercoreOrderbook() {
       if (response.ok) {
         const data = await response.json();
         if (data && Array.isArray(data)) {
-          const formattedTrades = data.slice(0, 20).map((trade: any) => ({
+          const formattedTrades = data.slice(0, 50).map((trade: any, index: number) => ({
+            id: `${trade.time || Date.now()}-${index}`,
+            time: trade.time || Date.now(),
+            price: parseFloat(trade.px),
+            size: parseFloat(trade.sz),
+            side: trade.side as 'buy' | 'sell'
+          }));
+          setRecentTrades(formattedTrades);
+          
+          // Also update the old tradeHistory format for compatibility
+          const legacyTrades = data.slice(0, 20).map((trade: any) => ({
             coin,
             side: trade.side as 'buy' | 'sell',
             size: trade.sz,
             price: trade.px,
-            time: trade.time
+            time: trade.time || Date.now()
           }));
-          setTradeHistory(formattedTrades);
+          setTradeHistory(legacyTrades);
         }
+      } else {
+        // Generate realistic mock trades for demo
+        const mockTrades: RecentTrade[] = Array.from({ length: 20 }, (_, i) => {
+          const side: 'buy' | 'sell' = Math.random() > 0.5 ? 'buy' : 'sell';
+          const price = 65000 + Math.random() * 2000 - 1000;
+          const size = Math.random() * 2;
+          const time = Date.now() - i * 30000; // 30 seconds apart
+          
+          return {
+            id: `mock-${time}-${i}`,
+            time,
+            price,
+            size,
+            side
+          };
+        });
+        setRecentTrades(mockTrades);
       }
     } catch (err) {
       console.error('Error fetching recent trades:', err);
-      // Generate mock trades for demo
-      const mockTrades = Array.from({ length: 10 }, (_, i) => ({
-        coin,
-        side: Math.random() > 0.5 ? 'buy' : 'sell' as 'buy' | 'sell',
-        size: (Math.random() * 10).toFixed(4),
-        price: (65000 + Math.random() * 1000 - 500).toFixed(2),
-        time: Date.now() - i * 60000
-      }));
-      setTradeHistory(mockTrades);
+      // Generate realistic mock trades for demo
+      const mockTrades: RecentTrade[] = Array.from({ length: 20 }, (_, i) => {
+        const side: 'buy' | 'sell' = Math.random() > 0.5 ? 'buy' : 'sell';
+        const price = 65000 + Math.random() * 2000 - 1000;
+        const size = Math.random() * 2;
+        const time = Date.now() - i * 30000; // 30 seconds apart
+        
+        return {
+          id: `mock-${time}-${i}`,
+          time,
+          price,
+          size,
+          side
+        };
+      });
+      setRecentTrades(mockTrades);
     }
   }, []);
   const fetchOrderbook = useCallback(async (coin: string) => {
@@ -434,21 +492,36 @@ export default function HypercoreOrderbook() {
     }
   }, []);
 
-  // Initialize data fetching
+  // Initialize data fetching with proper cleanup - NO chart auto-fetch on init
   useEffect(() => {
+    let mounted = true;
+    
     const initializeData = async () => {
+      if (!mounted) return;
       setLoading(true);
-      await Promise.all([
-        fetchOrderbook(selectedCoin),
-        fetchMarketStats(selectedCoin),
-        fetchChartData(selectedCoin, chartTimeframe),
-        fetchRecentTrades(selectedCoin)
-      ]);
-      setLoading(false);
+      
+      try {
+        await Promise.all([
+          fetchOrderbook(selectedCoin),
+          fetchMarketStats(selectedCoin),
+          fetchRecentTrades(selectedCoin)
+          // Removed fetchChartData from initial load - only manual/auto-refresh
+        ]);
+      } catch (error) {
+        console.error('Error initializing data:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     };
     
     initializeData();
-  }, [selectedCoin, fetchOrderbook, fetchMarketStats, fetchChartData, fetchRecentTrades, chartTimeframe]);
+    
+    return () => {
+      mounted = false;
+    };
+  }, [selectedCoin, fetchOrderbook, fetchMarketStats, fetchRecentTrades]);
 
   useEffect(() => {
     if (authenticated && user?.wallet?.address) {
@@ -456,7 +529,7 @@ export default function HypercoreOrderbook() {
     }
   }, [authenticated, user, fetchUserData]);
 
-  // Auto-refresh data (fallback for WebSocket) - reduced frequency
+  // Auto-refresh data every 30 seconds - ONLY for orderbook/trades, chart has separate 30s interval
   useEffect(() => {
     const interval = setInterval(() => {
       if (selectedCoin && (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN)) {
@@ -464,20 +537,28 @@ export default function HypercoreOrderbook() {
         fetchMarketStats(selectedCoin);
         fetchRecentTrades(selectedCoin);
       }
-    }, 10000); // Increased to 10 seconds for fallback
-
-    // Separate slower interval for chart data
-    const chartInterval = setInterval(() => {
-      if (selectedCoin) {
-        fetchChartData(selectedCoin, chartTimeframe);
-      }
-    }, 60000); // Chart updates every 60 seconds
+    }, 30000); // 30 seconds
 
     return () => {
       clearInterval(interval);
+    };
+  }, [selectedCoin, fetchOrderbook, fetchMarketStats, fetchRecentTrades]);
+
+  // Separate chart auto-refresh - ONLY every 30 seconds, no more
+  useEffect(() => {
+    // Initial chart load
+    fetchChartData(selectedCoin, chartTimeframe, true);
+    
+    const chartInterval = setInterval(() => {
+      if (selectedCoin) {
+        fetchChartData(selectedCoin, chartTimeframe, true); // Force refresh every 30s
+      }
+    }, 30000); // 30 seconds
+
+    return () => {
       clearInterval(chartInterval);
     };
-  }, [selectedCoin, chartTimeframe, fetchOrderbook, fetchMarketStats, fetchRecentTrades, fetchChartData]);
+  }, [selectedCoin, chartTimeframe, fetchChartData]);
 
   // WebSocket connection management
   useEffect(() => {
@@ -520,6 +601,190 @@ export default function HypercoreOrderbook() {
       }));
     }
   }, [selectedCoin]);
+
+  // Helper function for better time formatting
+  const formatChartTime = useCallback((timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    if (diffHours < 24) {
+      // Show only hours and minutes for today
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+      });
+    } else {
+      // Show date for older data
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+  }, []);
+
+  // Memoized chart rendering to prevent unnecessary re-renders
+  const ChartComponent = useMemo(() => {
+    if (chartLoading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin w-8 h-8 border-2 border-[#27FEE0] border-t-transparent rounded-full"></div>
+        </div>
+      );
+    }
+
+    // Show placeholder if no data
+    if (!candleData || candleData.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-gray-400 text-center">
+            <div className="mb-2">📊</div>
+            <div>No chart data available</div>
+            <div className="text-sm mt-1">Try refreshing or select a different timeframe</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (chartType === 'line') {
+      return (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={candleData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis 
+              dataKey="time" 
+              tickFormatter={formatChartTime}
+              stroke="#9CA3AF"
+            />
+            <YAxis 
+              domain={['dataMin - 100', 'dataMax + 100']}
+              tickFormatter={(value) => `$${value.toFixed(0)}`}
+              stroke="#9CA3AF"
+            />
+            <Tooltip 
+              labelFormatter={(time) => new Date(time).toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+              formatter={(value: any) => [`$${value.toFixed(2)}`, 'Price']}
+              contentStyle={{
+                backgroundColor: '#1F2937',
+                border: '1px solid #27FEE0',
+                borderRadius: '8px'
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey="close"
+              stroke="#27FEE0"
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      );
+    }
+    
+    if (chartType === 'candle') {
+      return (
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={candleData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis 
+              dataKey="time" 
+              tickFormatter={formatChartTime}
+              stroke="#9CA3AF"
+            />
+            <YAxis 
+              domain={['dataMin - 100', 'dataMax + 100']}
+              tickFormatter={(value) => `$${value.toFixed(0)}`}
+              stroke="#9CA3AF"
+            />
+            <Tooltip 
+              labelFormatter={(time) => new Date(time).toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+              formatter={(value: any, name: string) => {
+                switch(name) {
+                  case 'high': return [`$${value.toFixed(2)}`, 'High'];
+                  case 'low': return [`$${value.toFixed(2)}`, 'Low'];
+                  case 'open': return [`$${value.toFixed(2)}`, 'Open'];
+                  case 'close': return [`$${value.toFixed(2)}`, 'Close'];
+                  case 'volume': return [value.toFixed(2), 'Volume'];
+                  default: return [`$${value.toFixed(2)}`, name];
+                }
+              }}
+              contentStyle={{
+                backgroundColor: '#1F2937',
+                border: '1px solid #27FEE0',
+                borderRadius: '8px'
+              }}
+            />
+            <Bar dataKey="volume" fill="#27FEE0" fillOpacity={0.3} />
+            <Line dataKey="high" stroke="#10b981" strokeWidth={1} dot={false} />
+            <Line dataKey="low" stroke="#ef4444" strokeWidth={1} dot={false} />
+            <Line dataKey="close" stroke="#27FEE0" strokeWidth={2} dot={false} />
+            <ReferenceLine y={lastPrice} stroke="#fbbf24" strokeDasharray="5 5" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      );
+    }
+    
+    if (chartType === 'depth') {
+      return (
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={depthData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis 
+              dataKey="price" 
+              tickFormatter={(value) => `$${value.toFixed(0)}`}
+              stroke="#9CA3AF"
+            />
+            <YAxis 
+              tickFormatter={(value) => value.toFixed(2)}
+              stroke="#9CA3AF"
+            />
+            <Tooltip 
+              labelFormatter={(price) => `Price: $${price.toFixed(2)}`}
+              formatter={(value: any, name: string) => [
+                value.toFixed(4), 
+                name === 'bidTotal' ? 'Bid Depth' : 'Ask Depth'
+              ]}
+              contentStyle={{
+                backgroundColor: '#1F2937',
+                border: '1px solid #27FEE0',
+                borderRadius: '8px'
+              }}
+            />
+            <Area
+              dataKey="bidTotal"
+              stackId="1"
+              stroke="#10b981"
+              fill="#10b981"
+              fillOpacity={0.6}
+            />
+            <Area
+              dataKey="askTotal"
+              stackId="2"
+              stroke="#ef4444"
+              fill="#ef4444"
+              fillOpacity={0.6}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      );
+    }
+
+    return null;
+  }, [chartType, candleData, depthData, chartLoading, lastPrice, formatChartTime]);
 
   const handlePlaceOrder = async () => {
     if (!authenticated || !user?.wallet?.address) {
@@ -665,12 +930,18 @@ export default function HypercoreOrderbook() {
             </div>
 
             {activeTab === 'chart' && (
-              <div className="flex space-x-2">
+              <div className="flex space-x-2 items-center">
                 <div className="flex space-x-1 mr-4">
                   {(['line', 'candle', 'depth'] as const).map((type) => (
                     <button
                       key={type}
-                      onClick={() => setChartType(type)}
+                      onClick={() => {
+                        setChartType(type);
+                        // Only refresh if changing to chart types that need data
+                        if (type !== 'depth' && type !== chartType) {
+                          refreshChart(); // Manual refresh only when changing type
+                        }
+                      }}
                       className={`px-2 py-1 rounded text-xs transition-all ${
                         chartType === type ? 'bg-[#27FEE0] text-black' : 'bg-gray-600 text-white hover:bg-gray-500'
                       }`}
@@ -683,8 +954,12 @@ export default function HypercoreOrderbook() {
                   <button
                     key={tf}
                     onClick={() => {
+                      const currentTimeframe = chartTimeframe;
                       setChartTimeframe(tf);
-                      fetchChartData(selectedCoin, tf);
+                      // Only refresh if actually changing timeframe
+                      if (tf !== currentTimeframe) {
+                        refreshChart(); // Manual refresh only when changing timeframe
+                      }
                     }}
                     className={`px-3 py-1 rounded text-sm transition-all ${
                       chartTimeframe === tf ? 'bg-[#27FEE0] text-black' : 'bg-gray-700 text-white hover:bg-gray-600'
@@ -693,6 +968,15 @@ export default function HypercoreOrderbook() {
                     {tf}
                   </button>
                 ))}
+                {/* Manual refresh button */}
+                <button
+                  onClick={refreshChart}
+                  disabled={chartLoading}
+                  className="px-3 py-1 rounded text-sm transition-all bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                  title="Refresh chart data"
+                >
+                  {chartLoading ? '↻' : '🔄'}
+                </button>
               </div>
             )}
           </div>
@@ -706,131 +990,7 @@ export default function HypercoreOrderbook() {
                 exit={{ opacity: 0 }}
                 className="h-96"
               >
-                {chartLoading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="animate-spin w-8 h-8 border-2 border-[#27FEE0] border-t-transparent rounded-full"></div>
-                  </div>
-                ) : (
-                  <>
-                    {chartType === 'line' && (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={candleData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                          <XAxis 
-                            dataKey="time" 
-                            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                            stroke="#9CA3AF"
-                          />
-                          <YAxis 
-                            domain={['dataMin - 100', 'dataMax + 100']}
-                            tickFormatter={(value) => `$${value.toFixed(0)}`}
-                            stroke="#9CA3AF"
-                          />
-                          <Tooltip 
-                            labelFormatter={(time) => new Date(time).toLocaleString()}
-                            formatter={(value: any) => [`$${value.toFixed(2)}`, 'Price']}
-                            contentStyle={{
-                              backgroundColor: '#1F2937',
-                              border: '1px solid #27FEE0',
-                              borderRadius: '8px'
-                            }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="close"
-                            stroke="#27FEE0"
-                            strokeWidth={2}
-                            dot={false}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    )}
-                    
-                    {chartType === 'candle' && (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={candleData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                          <XAxis 
-                            dataKey="time" 
-                            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                            stroke="#9CA3AF"
-                          />
-                          <YAxis 
-                            domain={['dataMin - 100', 'dataMax + 100']}
-                            tickFormatter={(value) => `$${value.toFixed(0)}`}
-                            stroke="#9CA3AF"
-                          />
-                          <Tooltip 
-                            labelFormatter={(time) => new Date(time).toLocaleString()}
-                            formatter={(value: any, name: string) => {
-                              switch(name) {
-                                case 'high': return [`$${value.toFixed(2)}`, 'High'];
-                                case 'low': return [`$${value.toFixed(2)}`, 'Low'];
-                                case 'open': return [`$${value.toFixed(2)}`, 'Open'];
-                                case 'close': return [`$${value.toFixed(2)}`, 'Close'];
-                                case 'volume': return [value.toFixed(2), 'Volume'];
-                                default: return [`$${value.toFixed(2)}`, name];
-                              }
-                            }}
-                            contentStyle={{
-                              backgroundColor: '#1F2937',
-                              border: '1px solid #27FEE0',
-                              borderRadius: '8px'
-                            }}
-                          />
-                          <Bar dataKey="volume" fill="#27FEE0" fillOpacity={0.3} />
-                          <Line dataKey="high" stroke="#10b981" strokeWidth={1} dot={false} />
-                          <Line dataKey="low" stroke="#ef4444" strokeWidth={1} dot={false} />
-                          <Line dataKey="close" stroke="#27FEE0" strokeWidth={2} dot={false} />
-                          <ReferenceLine y={lastPrice} stroke="#fbbf24" strokeDasharray="5 5" />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    )}
-                    
-                    {chartType === 'depth' && (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={depthData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                          <XAxis 
-                            dataKey="price" 
-                            tickFormatter={(value) => `$${value.toFixed(0)}`}
-                            stroke="#9CA3AF"
-                          />
-                          <YAxis 
-                            tickFormatter={(value) => value.toFixed(2)}
-                            stroke="#9CA3AF"
-                          />
-                          <Tooltip 
-                            labelFormatter={(price) => `Price: $${price.toFixed(2)}`}
-                            formatter={(value: any, name: string) => [
-                              value.toFixed(4), 
-                              name === 'bidTotal' ? 'Bid Depth' : 'Ask Depth'
-                            ]}
-                            contentStyle={{
-                              backgroundColor: '#1F2937',
-                              border: '1px solid #27FEE0',
-                              borderRadius: '8px'
-                            }}
-                          />
-                          <Area
-                            dataKey="bidTotal"
-                            stackId="1"
-                            stroke="#10b981"
-                            fill="#10b981"
-                            fillOpacity={0.6}
-                          />
-                          <Area
-                            dataKey="askTotal"
-                            stackId="2"
-                            stroke="#ef4444"
-                            fill="#ef4444"
-                            fillOpacity={0.6}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    )}
-                  </>
-                )}
+                {ChartComponent}
               </motion.div>
             )}
 
