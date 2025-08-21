@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { motion, AnimatePresence } from "framer-motion";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, ComposedChart, Bar, ReferenceLine } from 'recharts';
 import PrivyWalletButton from "./PrivyWalletButton";
 
 // Hyperliquid types for orderbook
@@ -50,6 +50,29 @@ interface CandleData {
   volume: number;
 }
 
+interface DepthData {
+  price: number;
+  bidSize: number;
+  askSize: number;
+  bidTotal: number;
+  askTotal: number;
+}
+
+interface RecentTrade {
+  id: string;
+  time: number;
+  price: number;
+  size: number;
+  side: 'buy' | 'sell';
+}
+
+interface OrderBookUpdate {
+  price: string;
+  size: string;
+  side: 'bid' | 'ask';
+  action: 'update' | 'delete';
+}
+
 interface MarketStats {
   coin: string;
   markPrice: string;
@@ -71,11 +94,16 @@ export default function HypercoreOrderbook() {
   const [tradeHistory, setTradeHistory] = useState<TradeHistory[]>([]);
   const [marketStats, setMarketStats] = useState<MarketStats | null>(null);
   const [candleData, setCandleData] = useState<CandleData[]>([]);
+  const [depthData, setDepthData] = useState<DepthData[]>([]);
+  const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'chart' | 'orderbook' | 'trades'>('chart');
+  const [activeTab, setActiveTab] = useState<'chart' | 'orderbook' | 'trades' | 'depth'>('chart');
   const [chartTimeframe, setChartTimeframe] = useState<'1m' | '5m' | '1h' | '1d'>('1h');
+  const [chartType, setChartType] = useState<'line' | 'candle' | 'depth'>('candle');
+  const [lastPrice, setLastPrice] = useState<number>(0);
+  const [priceChange, setPriceChange] = useState<'up' | 'down' | 'none'>('none');
   
   // Trading form state
   const [orderType, setOrderType] = useState<'buy' | 'sell'>('buy');
@@ -83,6 +111,135 @@ export default function HypercoreOrderbook() {
   const [size, setSize] = useState<string>('');
   const [isMarketOrder, setIsMarketOrder] = useState<boolean>(false);
   const [leverage, setLeverage] = useState<number>(5);
+
+  // WebSocket and real-time updates
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastUpdateTimeRef = useRef<number>(0);
+  const orderBookUpdateThrottle = 500; // Throttle orderbook updates to 500ms
+
+  // Real-time WebSocket connection
+  const connectWebSocket = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    try {
+      // Hyperliquid WebSocket endpoint
+      wsRef.current = new WebSocket('wss://api.hyperliquid.xyz/ws');
+      
+      wsRef.current.onopen = () => {
+        console.log('WebSocket connected');
+        // Subscribe to orderbook updates
+        wsRef.current?.send(JSON.stringify({
+          method: 'subscribe',
+          subscription: { type: 'l2Book', coin: selectedCoin }
+        }));
+        
+        // Subscribe to trade updates
+        wsRef.current?.send(JSON.stringify({
+          method: 'subscribe',
+          subscription: { type: 'trades', coin: selectedCoin }
+        }));
+      };
+
+      wsRef.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleWebSocketMessage(data);
+        } catch (error) {
+          console.error('WebSocket message parse error:', error);
+        }
+      };
+
+      wsRef.current.onclose = () => {
+        console.log('WebSocket disconnected');
+        // Reconnect after 3 seconds
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+      };
+
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+    } catch (error) {
+      console.error('WebSocket connection error:', error);
+    }
+  }, [selectedCoin]);
+
+  // Handle WebSocket messages for real-time updates
+  const handleWebSocketMessage = useCallback((data: any) => {
+    if (data.channel === 'l2Book' && data.data?.coin === selectedCoin) {
+      // Update orderbook without full refresh
+      setOrderbook(prev => {
+        if (!prev) return data.data;
+        
+        // Smooth orderbook update
+        const newOrderbook = { ...data.data };
+        
+        // Check for price changes
+        const newPrice = parseFloat(newOrderbook.levels[0][0]?.px || '0');
+        if (newPrice !== lastPrice && lastPrice > 0) {
+          setPriceChange(newPrice > lastPrice ? 'up' : 'down');
+          setTimeout(() => setPriceChange('none'), 1000);
+        }
+        setLastPrice(newPrice);
+        
+        return newOrderbook;
+      });
+      
+      // Update depth chart data
+      updateDepthData(data.data);
+    }
+    
+    if (data.channel === 'trades' && data.data?.coin === selectedCoin) {
+      // Add new trades to recent trades
+      const newTrades = data.data.map((trade: any, index: number) => ({
+        id: `${Date.now()}-${index}`,
+        time: trade.time,
+        price: parseFloat(trade.px),
+        size: parseFloat(trade.sz),
+        side: trade.side
+      }));
+      
+      setRecentTrades(prev => [...newTrades, ...prev].slice(0, 50));
+    }
+  }, [selectedCoin, lastPrice]);
+
+  // Update depth chart data from orderbook
+  const updateDepthData = useCallback((orderbook: Orderbook) => {
+    const bids = orderbook.levels[0];
+    const asks = orderbook.levels[1];
+    
+    const depthArray: DepthData[] = [];
+    let bidTotal = 0;
+    let askTotal = 0;
+    
+    // Process bids (descending price order)
+    bids.slice(0, 20).reverse().forEach(bid => {
+      bidTotal += parseFloat(bid.sz);
+      depthArray.push({
+        price: parseFloat(bid.px),
+        bidSize: parseFloat(bid.sz),
+        askSize: 0,
+        bidTotal,
+        askTotal: 0
+      });
+    });
+    
+    // Process asks (ascending price order)
+    asks.slice(0, 20).forEach(ask => {
+      askTotal += parseFloat(ask.sz);
+      depthArray.push({
+        price: parseFloat(ask.px),
+        bidSize: 0,
+        askSize: parseFloat(ask.sz),
+        bidTotal: 0,
+        askTotal
+      });
+    });
+    
+    depthArray.sort((a, b) => a.price - b.price);
+    setDepthData(depthArray);
+  }, []);
 
   // Fetch market stats
   const fetchMarketStats = useCallback(async (coin: string) => {
@@ -299,22 +456,70 @@ export default function HypercoreOrderbook() {
     }
   }, [authenticated, user, fetchUserData]);
 
-  // Auto-refresh data every 5 seconds
+  // Auto-refresh data (fallback for WebSocket) - reduced frequency
   useEffect(() => {
     const interval = setInterval(() => {
-      if (selectedCoin) {
+      if (selectedCoin && (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN)) {
         fetchOrderbook(selectedCoin);
         fetchMarketStats(selectedCoin);
         fetchRecentTrades(selectedCoin);
-        // Refresh chart data less frequently (every 30 seconds)
-        if (Date.now() % 30000 < 5000) {
-          fetchChartData(selectedCoin, chartTimeframe);
-        }
       }
-    }, 5000);
+    }, 10000); // Increased to 10 seconds for fallback
 
-    return () => clearInterval(interval);
+    // Separate slower interval for chart data
+    const chartInterval = setInterval(() => {
+      if (selectedCoin) {
+        fetchChartData(selectedCoin, chartTimeframe);
+      }
+    }, 60000); // Chart updates every 60 seconds
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(chartInterval);
+    };
   }, [selectedCoin, chartTimeframe, fetchOrderbook, fetchMarketStats, fetchRecentTrades, fetchChartData]);
+
+  // WebSocket connection management
+  useEffect(() => {
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, [connectWebSocket]);
+
+  // Reconnect WebSocket when coin changes
+  useEffect(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Unsubscribe from previous coin
+      wsRef.current.send(JSON.stringify({
+        method: 'unsubscribe',
+        subscription: { type: 'l2Book' }
+      }));
+      wsRef.current.send(JSON.stringify({
+        method: 'unsubscribe',
+        subscription: { type: 'trades' }
+      }));
+      
+      // Subscribe to new coin
+      wsRef.current.send(JSON.stringify({
+        method: 'subscribe',
+        subscription: { type: 'l2Book', coin: selectedCoin }
+      }));
+      wsRef.current.send(JSON.stringify({
+        method: 'subscribe',
+        subscription: { type: 'trades', coin: selectedCoin }
+      }));
+    }
+  }, [selectedCoin]);
 
   const handlePlaceOrder = async () => {
     if (!authenticated || !user?.wallet?.address) {
@@ -423,103 +628,258 @@ export default function HypercoreOrderbook() {
             animate={{ opacity: 1, x: 0 }}
             className="bg-[#0B1614] rounded-xl p-6 shadow-lg border border-[#27FEE0]/20"
           >
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => setActiveTab('chart')}
-                  className={`px-4 py-2 rounded-lg transition-all ${
-                    activeTab === 'chart' ? 'bg-[#27FEE0] text-black' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Chart
-                </button>
-                <button
-                  onClick={() => setActiveTab('orderbook')}
-                  className={`px-4 py-2 rounded-lg transition-all ${
-                    activeTab === 'orderbook' ? 'bg-[#27FEE0] text-black' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Orderbook
-                </button>
-                <button
-                  onClick={() => setActiveTab('trades')}
-                  className={`px-4 py-2 rounded-lg transition-all ${
-                    activeTab === 'trades' ? 'bg-[#27FEE0] text-black' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Recent Trades
-                </button>
-              </div>
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setActiveTab('chart')}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  activeTab === 'chart' ? 'bg-[#27FEE0] text-black' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Chart
+              </button>
+              <button
+                onClick={() => setActiveTab('orderbook')}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  activeTab === 'orderbook' ? 'bg-[#27FEE0] text-black' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Orderbook
+              </button>
+              <button
+                onClick={() => setActiveTab('depth')}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  activeTab === 'depth' ? 'bg-[#27FEE0] text-black' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Depth
+              </button>
+              <button
+                onClick={() => setActiveTab('trades')}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  activeTab === 'trades' ? 'bg-[#27FEE0] text-black' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Recent Trades
+              </button>
+            </div>
 
-              {activeTab === 'chart' && (
-                <div className="flex space-x-2">
-                  {(['1m', '5m', '1h', '1d'] as const).map((tf) => (
+            {activeTab === 'chart' && (
+              <div className="flex space-x-2">
+                <div className="flex space-x-1 mr-4">
+                  {(['line', 'candle', 'depth'] as const).map((type) => (
                     <button
-                      key={tf}
-                      onClick={() => {
-                        setChartTimeframe(tf);
-                        fetchChartData(selectedCoin, tf);
-                      }}
-                      className={`px-3 py-1 rounded text-sm transition-all ${
-                        chartTimeframe === tf ? 'bg-[#27FEE0] text-black' : 'bg-gray-700 text-white hover:bg-gray-600'
+                      key={type}
+                      onClick={() => setChartType(type)}
+                      className={`px-2 py-1 rounded text-xs transition-all ${
+                        chartType === type ? 'bg-[#27FEE0] text-black' : 'bg-gray-600 text-white hover:bg-gray-500'
                       }`}
                     >
-                      {tf}
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
+                {(['1m', '5m', '1h', '1d'] as const).map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => {
+                      setChartTimeframe(tf);
+                      fetchChartData(selectedCoin, tf);
+                    }}
+                    className={`px-3 py-1 rounded text-sm transition-all ${
+                      chartTimeframe === tf ? 'bg-[#27FEE0] text-black' : 'bg-gray-700 text-white hover:bg-gray-600'
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-            <AnimatePresence mode="wait">
-              {activeTab === 'chart' && (
-                <motion.div
-                  key="chart"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="h-96"
-                >
-                  {chartLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="animate-spin w-8 h-8 border-2 border-[#27FEE0] border-t-transparent rounded-full"></div>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={candleData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis 
-                          dataKey="time" 
-                          tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                          stroke="#9CA3AF"
-                        />
-                        <YAxis 
-                          domain={['dataMin - 100', 'dataMax + 100']}
-                          tickFormatter={(value) => `$${value.toFixed(0)}`}
-                          stroke="#9CA3AF"
-                        />
-                        <Tooltip 
-                          labelFormatter={(time) => new Date(time).toLocaleString()}
-                          formatter={(value: any) => [`$${value.toFixed(2)}`, 'Price']}
-                          contentStyle={{
-                            backgroundColor: '#1F2937',
-                            border: '1px solid #27FEE0',
-                            borderRadius: '8px'
-                          }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="close"
-                          stroke="#27FEE0"
-                          fill="#27FEE0"
-                          fillOpacity={0.1}
-                          strokeWidth={2}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
-                </motion.div>
-              )}
+          <AnimatePresence mode="wait">
+            {activeTab === 'chart' && (
+              <motion.div
+                key="chart"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="h-96"
+              >
+                {chartLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="animate-spin w-8 h-8 border-2 border-[#27FEE0] border-t-transparent rounded-full"></div>
+                  </div>
+                ) : (
+                  <>
+                    {chartType === 'line' && (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={candleData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis 
+                            dataKey="time" 
+                            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
+                            stroke="#9CA3AF"
+                          />
+                          <YAxis 
+                            domain={['dataMin - 100', 'dataMax + 100']}
+                            tickFormatter={(value) => `$${value.toFixed(0)}`}
+                            stroke="#9CA3AF"
+                          />
+                          <Tooltip 
+                            labelFormatter={(time) => new Date(time).toLocaleString()}
+                            formatter={(value: any) => [`$${value.toFixed(2)}`, 'Price']}
+                            contentStyle={{
+                              backgroundColor: '#1F2937',
+                              border: '1px solid #27FEE0',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="close"
+                            stroke="#27FEE0"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                    
+                    {chartType === 'candle' && (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={candleData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis 
+                            dataKey="time" 
+                            tickFormatter={(time) => new Date(time).toLocaleTimeString()}
+                            stroke="#9CA3AF"
+                          />
+                          <YAxis 
+                            domain={['dataMin - 100', 'dataMax + 100']}
+                            tickFormatter={(value) => `$${value.toFixed(0)}`}
+                            stroke="#9CA3AF"
+                          />
+                          <Tooltip 
+                            labelFormatter={(time) => new Date(time).toLocaleString()}
+                            formatter={(value: any, name: string) => {
+                              switch(name) {
+                                case 'high': return [`$${value.toFixed(2)}`, 'High'];
+                                case 'low': return [`$${value.toFixed(2)}`, 'Low'];
+                                case 'open': return [`$${value.toFixed(2)}`, 'Open'];
+                                case 'close': return [`$${value.toFixed(2)}`, 'Close'];
+                                case 'volume': return [value.toFixed(2), 'Volume'];
+                                default: return [`$${value.toFixed(2)}`, name];
+                              }
+                            }}
+                            contentStyle={{
+                              backgroundColor: '#1F2937',
+                              border: '1px solid #27FEE0',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Bar dataKey="volume" fill="#27FEE0" fillOpacity={0.3} />
+                          <Line dataKey="high" stroke="#10b981" strokeWidth={1} dot={false} />
+                          <Line dataKey="low" stroke="#ef4444" strokeWidth={1} dot={false} />
+                          <Line dataKey="close" stroke="#27FEE0" strokeWidth={2} dot={false} />
+                          <ReferenceLine y={lastPrice} stroke="#fbbf24" strokeDasharray="5 5" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    )}
+                    
+                    {chartType === 'depth' && (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={depthData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis 
+                            dataKey="price" 
+                            tickFormatter={(value) => `$${value.toFixed(0)}`}
+                            stroke="#9CA3AF"
+                          />
+                          <YAxis 
+                            tickFormatter={(value) => value.toFixed(2)}
+                            stroke="#9CA3AF"
+                          />
+                          <Tooltip 
+                            labelFormatter={(price) => `Price: $${price.toFixed(2)}`}
+                            formatter={(value: any, name: string) => [
+                              value.toFixed(4), 
+                              name === 'bidTotal' ? 'Bid Depth' : 'Ask Depth'
+                            ]}
+                            contentStyle={{
+                              backgroundColor: '#1F2937',
+                              border: '1px solid #27FEE0',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Area
+                            dataKey="bidTotal"
+                            stackId="1"
+                            stroke="#10b981"
+                            fill="#10b981"
+                            fillOpacity={0.6}
+                          />
+                          <Area
+                            dataKey="askTotal"
+                            stackId="2"
+                            stroke="#ef4444"
+                            fill="#ef4444"
+                            fillOpacity={0.6}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            )}
+
+            {activeTab === 'depth' && (
+              <motion.div
+                key="depth"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="h-96"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={depthData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      dataKey="price" 
+                      tickFormatter={(value) => `$${value.toFixed(0)}`}
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis stroke="#9CA3AF" />
+                    <Tooltip 
+                      labelFormatter={(price) => `Price: $${price.toFixed(2)}`}
+                      formatter={(value: any, name: string) => {
+                        const displayName = name === 'bidSize' ? 'Bid Size' : 'Ask Size';
+                        return [value.toFixed(4), displayName];
+                      }}
+                      contentStyle={{
+                        backgroundColor: '#1F2937',
+                        border: '1px solid #27FEE0',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Area
+                      dataKey="bidSize"
+                      stroke="#10b981"
+                      fill="#10b981"
+                      fillOpacity={0.6}
+                    />
+                    <Area
+                      dataKey="askSize"
+                      stroke="#ef4444"
+                      fill="#ef4444"
+                      fillOpacity={0.6}
+                    />
+                    <ReferenceLine y={0} stroke="#9CA3AF" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </motion.div>
+            )}
 
               {activeTab === 'orderbook' && (
                 <motion.div
@@ -534,52 +894,135 @@ export default function HypercoreOrderbook() {
                       <p className="text-white/60 mt-2">Loading orderbook...</p>
                     </div>
                   ) : orderbook ? (
-                    <div className="grid grid-cols-2 gap-6">
-                      {/* Bids */}
-                      <div>
-                        <h3 className="text-lg text-green-400 mb-3 flex items-center">
-                          <span className="w-3 h-3 bg-green-400 rounded-full mr-2"></span>
-                          Bids
-                        </h3>
-                        <div className="space-y-1">
-                          <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700">
-                            <span>Price ({selectedCoin})</span>
-                            <span>Size</span>
-                            <span>Total</span>
-                          </div>
-                          {orderbook.levels[0].slice(0, 15).map((bid, idx) => (
-                            <div key={idx} className="grid grid-cols-3 text-sm hover:bg-green-500/10 p-1 rounded cursor-pointer"
-                                 onClick={() => setPrice(bid.px)}>
-                              <span className="text-green-400 font-mono">{formatPrice(bid.px)}</span>
-                              <span className="text-white/80 font-mono">{formatSize(bid.sz)}</span>
-                              <span className="text-white/60 font-mono text-xs">{bid.n}</span>
+                    <div className="space-y-6">
+                      {/* Market Price Display */}
+                      <div className="text-center py-4 bg-gray-800/30 rounded-lg">
+                        <div className="text-2xl font-bold mb-1">
+                          <span className={`transition-colors duration-500 ${
+                            priceChange === 'up' ? 'text-green-400' : 
+                            priceChange === 'down' ? 'text-red-400' : 'text-[#27FEE0]'
+                          }`}>
+                            ${formatPrice(lastPrice.toString())}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          Last Price • {selectedCoin}-USDC
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Asks (Top half - reversed order for proper display) */}
+                        <div className="order-2">
+                          <h3 className="text-lg text-red-400 mb-3 flex items-center justify-between">
+                            <span className="flex items-center">
+                              <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
+                              Asks
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {orderbook.levels[1].length} orders
+                            </span>
+                          </h3>
+                          <div className="space-y-1">
+                            <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700 sticky top-0 bg-[#0B1614]">
+                              <span>Price (USDC)</span>
+                              <span>Size ({selectedCoin})</span>
+                              <span>Total</span>
                             </div>
-                          ))}
+                            {orderbook.levels[1].slice(0, 15).reverse().map((ask, idx) => {
+                              const total = orderbook.levels[1].slice(0, 15 - idx).reduce((sum, level) => sum + parseFloat(level.sz), 0);
+                              const maxTotal = orderbook.levels[1].slice(0, 15).reduce((sum, level) => sum + parseFloat(level.sz), 0);
+                              const percentage = (total / maxTotal) * 100;
+                              
+                              return (
+                                <motion.div 
+                                  key={`ask-${ask.px}`}
+                                  layout
+                                  initial={{ opacity: 0, x: 10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  className="relative grid grid-cols-3 text-sm hover:bg-red-500/10 p-2 rounded cursor-pointer transition-all group"
+                                  onClick={() => setPrice(ask.px)}
+                                >
+                                  <div 
+                                    className="absolute inset-0 bg-red-500/5 rounded"
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                  <span className="text-red-400 font-mono relative z-10 group-hover:text-red-300">
+                                    {formatPrice(ask.px)}
+                                  </span>
+                                  <span className="text-white/80 font-mono relative z-10">
+                                    {formatSize(ask.sz)}
+                                  </span>
+                                  <span className="text-white/60 font-mono text-xs relative z-10">
+                                    {total.toFixed(4)}
+                                  </span>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Bids (Bottom half) */}
+                        <div className="order-1">
+                          <h3 className="text-lg text-green-400 mb-3 flex items-center justify-between">
+                            <span className="flex items-center">
+                              <span className="w-3 h-3 bg-green-400 rounded-full mr-2"></span>
+                              Bids
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {orderbook.levels[0].length} orders
+                            </span>
+                          </h3>
+                          <div className="space-y-1">
+                            <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700 sticky top-0 bg-[#0B1614]">
+                              <span>Price (USDC)</span>
+                              <span>Size ({selectedCoin})</span>
+                              <span>Total</span>
+                            </div>
+                            {orderbook.levels[0].slice(0, 15).map((bid, idx) => {
+                              const total = orderbook.levels[0].slice(0, idx + 1).reduce((sum, level) => sum + parseFloat(level.sz), 0);
+                              const maxTotal = orderbook.levels[0].slice(0, 15).reduce((sum, level) => sum + parseFloat(level.sz), 0);
+                              const percentage = (total / maxTotal) * 100;
+                              
+                              return (
+                                <motion.div 
+                                  key={`bid-${bid.px}`}
+                                  layout
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  className="relative grid grid-cols-3 text-sm hover:bg-green-500/10 p-2 rounded cursor-pointer transition-all group"
+                                  onClick={() => setPrice(bid.px)}
+                                >
+                                  <div 
+                                    className="absolute inset-0 bg-green-500/5 rounded"
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                  <span className="text-green-400 font-mono relative z-10 group-hover:text-green-300">
+                                    {formatPrice(bid.px)}
+                                  </span>
+                                  <span className="text-white/80 font-mono relative z-10">
+                                    {formatSize(bid.sz)}
+                                  </span>
+                                  <span className="text-white/60 font-mono text-xs relative z-10">
+                                    {total.toFixed(4)}
+                                  </span>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Asks */}
-                      <div>
-                        <h3 className="text-lg text-red-400 mb-3 flex items-center">
-                          <span className="w-3 h-3 bg-red-400 rounded-full mr-2"></span>
-                          Asks
-                        </h3>
-                        <div className="space-y-1">
-                          <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700">
-                            <span>Price ({selectedCoin})</span>
-                            <span>Size</span>
-                            <span>Total</span>
+                      {/* Spread Information */}
+                      {orderbook.levels[0][0] && orderbook.levels[1][0] && (
+                        <div className="text-center py-2 bg-gray-800/20 rounded">
+                          <div className="text-sm text-gray-400">
+                            Spread: <span className="text-white font-mono">
+                              ${(parseFloat(orderbook.levels[1][0].px) - parseFloat(orderbook.levels[0][0].px)).toFixed(2)}
+                            </span>
+                            {' '}({((parseFloat(orderbook.levels[1][0].px) - parseFloat(orderbook.levels[0][0].px)) / parseFloat(orderbook.levels[0][0].px) * 100).toFixed(3)}%)
                           </div>
-                          {orderbook.levels[1].slice(0, 15).map((ask, idx) => (
-                            <div key={idx} className="grid grid-cols-3 text-sm hover:bg-red-500/10 p-1 rounded cursor-pointer"
-                                 onClick={() => setPrice(ask.px)}>
-                              <span className="text-red-400 font-mono">{formatPrice(ask.px)}</span>
-                              <span className="text-white/80 font-mono">{formatSize(ask.sz)}</span>
-                              <span className="text-white/60 font-mono text-xs">{ask.n}</span>
-                            </div>
-                          ))}
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-red-500 text-center py-4">{error}</div>
@@ -602,18 +1045,30 @@ export default function HypercoreOrderbook() {
                       <span>Price</span>
                       <span>Size</span>
                     </div>
-                    {tradeHistory.map((trade, idx) => (
-                      <div key={idx} className="grid grid-cols-4 text-sm hover:bg-gray-800/30 p-2 rounded">
+                    {recentTrades.map((trade) => (
+                      <motion.div 
+                        key={trade.id}
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="grid grid-cols-4 text-sm hover:bg-gray-800/30 p-2 rounded transition-all"
+                      >
                         <span className="text-white/60 text-xs">
                           {new Date(trade.time).toLocaleTimeString()}
                         </span>
                         <span className={`font-semibold ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
                           {trade.side.toUpperCase()}
                         </span>
-                        <span className="text-white font-mono">${formatPrice(trade.price)}</span>
-                        <span className="text-white/80 font-mono">{formatSize(trade.size)}</span>
-                      </div>
+                        <span className={`font-mono ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                          ${trade.price.toFixed(2)}
+                        </span>
+                        <span className="text-white/80 font-mono">{trade.size.toFixed(4)}</span>
+                      </motion.div>
                     ))}
+                    {recentTrades.length === 0 && (
+                      <div className="text-center py-8 text-gray-500">
+                        No recent trades available
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
