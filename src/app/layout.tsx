@@ -22,8 +22,8 @@ export const metadata: Metadata = {
 
 function TopBar() {
   return (
-    <div className="w-full flex justify-between items-center px-8 py-6 z-10 relative">
-      <a href="/" className="text-2xl font-bold text-[#27FEE0] tracking-tight select-none hover:text-white transition-colors cursor-pointer">Privy.hl</a>
+    <div className="w-full flex justify-between items-center px-8 py-4 z-10 relative">
+      <a href="/" className="text-xl font-bold text-[#27FEE0] tracking-tight select-none hover:text-white transition-colors cursor-pointer">Privy.hl</a>
       
       {/* Centered Navigation */}
       <div className="flex items-center gap-4">
