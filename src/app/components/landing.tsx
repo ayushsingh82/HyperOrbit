@@ -137,6 +137,9 @@ export default function Landing() {
               🚀 Launch DAO
               <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#27FEE0] to-[#27FEE0]/80 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
             </a>
+            <a href="/hypercore" className="px-10 py-4 rounded-xl border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-lg shadow-lg transition-all duration-300 hover:scale-105 hover:bg-[#27FEE0] hover:text-[#0B1614] hover:shadow-[#27FEE0]/40">
+              ⚡ Trade on Hypercore
+            </a>
             <a href="/dao" className="px-10 py-4 rounded-xl border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-lg shadow-lg transition-all duration-300 hover:scale-105 hover:bg-[#27FEE0] hover:text-[#0B1614] hover:shadow-[#27FEE0]/40">
               🔍 Explore Communities
             </a>
