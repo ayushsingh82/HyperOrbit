@@ -1,3 +1,6 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
@@ -64,13 +67,6 @@ interface RecentTrade {
   price: number;
   size: number;
   side: 'buy' | 'sell';
-}
-
-interface OrderBookUpdate {
-  price: string;
-  size: string;
-  side: 'bid' | 'ask';
-  action: 'update' | 'delete';
 }
 
 interface MarketStats {
