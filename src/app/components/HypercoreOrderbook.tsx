@@ -8,6 +8,9 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, ComposedChart, Bar, ReferenceLine } from 'recharts';
 import PrivyWalletButton from "./PrivyWalletButton";
+import TransactionHistory from "./TransactionHistory";
+import { useNotification } from "./NotificationSystem";
+import { useWeb3Trading, RealTradeParams } from '../lib/web3Integration';
 
 // Hyperliquid types for orderbook
 interface BookLevel {
@@ -82,6 +85,8 @@ interface MarketStats {
 export default function HypercoreOrderbook() {
   const { ready, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
+  const { addNotification } = useNotification();
+  const { web3Provider, isConnected, userAddress } = useWeb3Trading();
   
   const [selectedCoin, setSelectedCoin] = useState<string>("BTC");
   const [orderbook, setOrderbook] = useState<Orderbook | null>(null);
@@ -267,22 +272,29 @@ export default function HypercoreOrderbook() {
       ]);
 
       if (metaResponse.ok && midResponse.ok) {
-        const metaData = await metaResponse.json();
-        const midData = await midResponse.json();
-        
-        const coinMeta = metaData.universe?.find((u: any) => u.name === coin);
-        const coinMid = midData[coin];
-        
-        if (coinMeta && coinMid) {
-          setMarketStats({
-            coin,
-            markPrice: coinMid,
-            indexPrice: coinMid,
-            fundingRate: '0.0001',
-            openInterest: '1000000',
-            volume24h: '50000000',
-            change24h: '+2.5'
-          });
+        try {
+          const metaText = await metaResponse.text();
+          const midText = await midResponse.text();
+          
+          const metaData = metaText ? JSON.parse(metaText) : null;
+          const midData = midText ? JSON.parse(midText) : null;
+          
+          const coinMeta = metaData?.universe?.find((u: any) => u.name === coin);
+          const coinMid = midData?.[coin];
+          
+          if (coinMeta && coinMid) {
+            setMarketStats({
+              coin,
+              markPrice: coinMid,
+              indexPrice: coinMid,
+              fundingRate: '0.0001',
+              openInterest: '1000000',
+              volume24h: '50000000',
+              change24h: '+2.5'
+            });
+          }
+        } catch (parseError) {
+          console.error('Error parsing market data:', parseError);
         }
       }
     } catch (err) {
@@ -445,7 +457,12 @@ export default function HypercoreOrderbook() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: Orderbook = await response.json();
+      const responseText = await response.text();
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty orderbook response');
+      }
+      
+      const data: Orderbook = JSON.parse(responseText);
       setOrderbook(data);
     } catch (err) {
       console.error('Error fetching orderbook:', err);
@@ -784,24 +801,292 @@ export default function HypercoreOrderbook() {
 
   const handlePlaceOrder = async () => {
     if (!authenticated || !user?.wallet?.address) {
-      alert('Please connect your wallet first');
+      addNotification({
+        type: 'warning',
+        title: 'Wallet Required',
+        message: 'Please connect your wallet first to place orders'
+      });
       return;
     }
 
     if (!price || !size) {
-      alert('Please enter both price and size');
+      addNotification({
+        type: 'error',
+        title: 'Invalid Order',
+        message: 'Please enter both price and size'
+      });
       return;
     }
 
     try {
-      // This would require implementing the full Hyperliquid exchange client
-      // with proper signing and order placement
-      alert(`Order would be placed: ${orderType} ${size} ${selectedCoin} at ${isMarketOrder ? 'market' : price}`);
+      // Prepare real trade parameters
+      const tradeParams: RealTradeParams = {
+        coin: selectedCoin,
+        side: orderType,
+        amount: size,
+        orderType: isMarketOrder ? 'market' : 'limit',
+        price: isMarketOrder ? undefined : price
+      };
+
+      console.log('🔥 REAL TRADING: Placing order with Web3Provider:', tradeParams);
+
+      // Try real Hyperliquid trading first
+      if (web3Provider && isConnected) {
+        addNotification({
+          type: 'info',
+          title: 'Processing Real Order...',
+          message: `Attempting to submit ${orderType.toUpperCase()} order to Hyperliquid...\n\n⚠️ Note: This will attempt real trading if Web3 provider is available.`,
+          duration: 5000
+        });
+
+        const result = await web3Provider.placeHyperliquidOrder(tradeParams);
+        
+        if (result.success) {
+          const isRealTrade = result.orderId?.startsWith('api_') ? 'API' : 'REAL';
+          addNotification({
+            type: 'success',
+            title: `${isRealTrade} Order Executed! 🎉`,
+            message: `✅ ${isRealTrade} ${orderType.toUpperCase()} order executed!\n\n📊 Order Details:\n- Coin: ${selectedCoin}\n- Amount: ${size}\n- Price: ${isMarketOrder ? 'MARKET' : '$' + price}\n- Order ID: ${result.orderId}\n- TX Hash: ${result.txHash || 'N/A'}\n\n${isRealTrade === 'REAL' ? '🔗 This trade executed on the real Hyperliquid exchange!' : '🔄 This was processed via Hyperliquid API'}`,
+            duration: 10000
+          });
+          
+          // Add to real trade history
+          const newTrade: TradeHistory = {
+            coin: selectedCoin,
+            side: orderType,
+            size: size,
+            price: isMarketOrder ? (orderbook?.levels[orderType === 'buy' ? 1 : 0][0]?.px || '0') : price,
+            time: Date.now()
+          };
+          
+          setTradeHistory(prev => [newTrade, ...prev.slice(0, 19)]);
+          
+          // Save real trade data
+          const savedOrders = JSON.parse(localStorage.getItem('real-hyperliquid-orders') || '[]');
+          savedOrders.push({
+            ...tradeParams,
+            timestamp: Date.now(),
+            status: 'filled',
+            orderId: result.orderId,
+            txHash: result.txHash,
+            real: true
+          });
+          localStorage.setItem('real-hyperliquid-orders', JSON.stringify(savedOrders));
+          
+          // Clear form
+          setPrice('');
+          setSize('');
+          
+        } else {
+          // If real trading failed, show the error but don't fallback to demo
+          addNotification({
+            type: 'error',
+            title: 'Real Order Failed',
+            message: `Real trading attempt failed: ${result.error}\n\nTry checking:\n- Network connection\n- Wallet balance\n- Market liquidity`
+          });
+          return;
+        }
+      } else {
+        // Fallback to demo mode if Web3 not available
+        console.log('Web3 not available, falling back to demo mode');
+        
+        addNotification({
+          type: 'warning',
+          title: 'Demo Mode - No Real Trading',
+          message: 'Web3 provider not available. This would be a real trade in production.\n\nTo enable real trading:\n1. Connect to Arbitrum network\n2. Ensure proper wallet setup\n3. Have sufficient balance',
+          duration: 7000
+        });
+
+        // Simulate for demo purposes
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        const estimatedPrice = isMarketOrder 
+          ? (orderbook?.levels[orderType === 'buy' ? 1 : 0][0]?.px || price)
+          : price;
+        
+        const newTrade: TradeHistory = {
+          coin: selectedCoin,
+          side: orderType,
+          size: size,
+          price: estimatedPrice,
+          time: Date.now()
+        };
+        
+        setTradeHistory(prev => [newTrade, ...prev.slice(0, 19)]);
+        
+        const newRecentTrade: RecentTrade = {
+          id: `trade_${Date.now()}`,
+          time: Date.now(),
+          price: parseFloat(estimatedPrice),
+          size: parseFloat(size),
+          side: orderType
+        };
+        
+        setRecentTrades(prev => [newRecentTrade, ...prev.slice(0, 49)]);
+        
+        addNotification({
+          type: 'info',
+          title: 'Demo Order Simulated',
+          message: `📊 Demo ${orderType.toUpperCase()}: ${size} ${selectedCoin} at ${isMarketOrder ? 'MARKET' : '$' + price}\n\n⚠️ This was simulated. In production, this would be a real blockchain transaction.`,
+          duration: 6000
+        });
+        
+        // Clear form
+        setPrice('');
+        setSize('');
+      }
+      
     } catch (err) {
       console.error('Error placing order:', err);
-      alert('Failed to place order');
+      addNotification({
+        type: 'error',
+        title: 'Order Failed',
+        message: `Failed to place order: ${err instanceof Error ? err.message : 'Unknown error'}\n\nThis could be due to:\n- Insufficient balance\n- Network issues\n- Invalid parameters`
+      });
     }
   };
+
+  // Quick order functions for better UX
+  const handleQuickBuy = useCallback(async (orderBookPrice: string, orderBookSize: string) => {
+    if (!authenticated) {
+      addNotification({
+        type: 'warning',
+        title: 'Wallet Required',
+        message: 'Please connect your wallet first'
+      });
+      return;
+    }
+    
+    setOrderType('buy');
+    setPrice(orderBookPrice);
+    setSize(orderBookSize);
+    setIsMarketOrder(false);
+    
+    // Show confirmation via notification
+    addNotification({
+      type: 'info',
+      title: 'Quick Buy Order Ready',
+      message: `🟢 BUY ${orderBookSize} ${selectedCoin}\n💰 Price: $${orderBookPrice}\n📊 Total: $${(parseFloat(orderBookSize) * parseFloat(orderBookPrice)).toFixed(2)}\n\nExecuting order automatically...`,
+      duration: 3000
+    });
+    
+    // Auto-execute after brief delay
+    setTimeout(() => {
+      handlePlaceOrder();
+    }, 1000);
+  }, [authenticated, selectedCoin, addNotification, handlePlaceOrder]);
+
+  const handleQuickSell = useCallback(async (orderBookPrice: string, orderBookSize: string) => {
+    if (!authenticated) {
+      addNotification({
+        type: 'warning',
+        title: 'Wallet Required',
+        message: 'Please connect your wallet first'
+      });
+      return;
+    }
+    
+    setOrderType('sell');
+    setPrice(orderBookPrice);
+    setSize(orderBookSize);
+    setIsMarketOrder(false);
+    
+    // Show confirmation via notification
+    addNotification({
+      type: 'info',
+      title: 'Quick Sell Order Ready',
+      message: `🔴 SELL ${orderBookSize} ${selectedCoin}\n💰 Price: $${orderBookPrice}\n📊 Total: $${(parseFloat(orderBookSize) * parseFloat(orderBookPrice)).toFixed(2)}\n\nExecuting order automatically...`,
+      duration: 3000
+    });
+    
+    // Auto-execute after brief delay
+    setTimeout(() => {
+      handlePlaceOrder();
+    }, 1000);
+  }, [authenticated, selectedCoin, addNotification, handlePlaceOrder]);
+
+  // Market order functions
+  const handleMarketBuy = useCallback(async () => {
+    if (!orderbook || !authenticated) {
+      addNotification({
+        type: 'warning',
+        title: 'Cannot Execute Market Buy',
+        message: 'Please connect your wallet and wait for orderbook to load'
+      });
+      return;
+    }
+    
+    const bestAsk = orderbook.levels[1][0]; // Best ask price
+    if (!bestAsk) {
+      addNotification({
+        type: 'error',
+        title: 'No Liquidity',
+        message: 'No asks available in orderbook'
+      });
+      return;
+    }
+    
+    const defaultSize = '0.01';
+    const marketPrice = bestAsk.px;
+    const total = (parseFloat(defaultSize) * parseFloat(marketPrice)).toFixed(2);
+    
+    addNotification({
+      type: 'info',
+      title: 'Market Buy Order',
+      message: `🚀 MARKET BUY ${defaultSize} ${selectedCoin}\n💰 Estimated Price: $${marketPrice}\n📊 Estimated Total: $${total}\n⚡ Executing immediately...`,
+      duration: 3000
+    });
+    
+    setOrderType('buy');
+    setPrice(marketPrice);
+    setSize(defaultSize);
+    setIsMarketOrder(true);
+    
+    setTimeout(async () => {
+      await handlePlaceOrder();
+    }, 1000);
+  }, [orderbook, authenticated, selectedCoin, addNotification, handlePlaceOrder]);
+
+  const handleMarketSell = useCallback(async () => {
+    if (!orderbook || !authenticated) {
+      addNotification({
+        type: 'warning',
+        title: 'Cannot Execute Market Sell',
+        message: 'Please connect your wallet and wait for orderbook to load'
+      });
+      return;
+    }
+    
+    const bestBid = orderbook.levels[0][0]; // Best bid price
+    if (!bestBid) {
+      addNotification({
+        type: 'error',
+        title: 'No Liquidity',
+        message: 'No bids available in orderbook'
+      });
+      return;
+    }
+    
+    const defaultSize = '0.01';
+    const marketPrice = bestBid.px;
+    const total = (parseFloat(defaultSize) * parseFloat(marketPrice)).toFixed(2);
+    
+    addNotification({
+      type: 'info',
+      title: 'Market Sell Order',
+      message: `🔥 MARKET SELL ${defaultSize} ${selectedCoin}\n💰 Estimated Price: $${marketPrice}\n📊 Estimated Total: $${total}\n⚡ Executing immediately...`,
+      duration: 3000
+    });
+    
+    setOrderType('sell');
+    setPrice(marketPrice);
+    setSize(defaultSize);
+    setIsMarketOrder(true);
+    
+    setTimeout(async () => {
+      await handlePlaceOrder();
+    }, 1000);
+  }, [orderbook, authenticated, selectedCoin, addNotification, handlePlaceOrder]);
 
   const formatPrice = useCallback((px: string) => parseFloat(px).toFixed(2), []);
   const formatSize = useCallback((sz: string) => parseFloat(sz).toFixed(4), []);
@@ -1079,10 +1364,11 @@ export default function HypercoreOrderbook() {
                             </span>
                           </h3>
                           <div className="space-y-1">
-                            <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700 sticky top-0 bg-[#0B1614]">
+                            <div className="grid grid-cols-4 text-xs text-gray-400 pb-2 border-b border-gray-700 sticky top-0 bg-[#0B1614]">
                               <span>Price (USDC)</span>
                               <span>Size ({selectedCoin})</span>
                               <span>Total</span>
+                              <span>Action</span>
                             </div>
                             {orderbook.levels[1].slice(0, 15).reverse().map((ask, idx) => {
                               const total = orderbook.levels[1].slice(0, 15 - idx).reduce((sum, level) => sum + parseFloat(level.sz), 0);
@@ -1095,7 +1381,7 @@ export default function HypercoreOrderbook() {
                                   layout
                                   initial={{ opacity: 0, x: 10 }}
                                   animate={{ opacity: 1, x: 0 }}
-                                  className="relative grid grid-cols-3 text-sm hover:bg-red-500/10 p-2 rounded cursor-pointer transition-all group"
+                                  className="relative grid grid-cols-4 text-sm hover:bg-red-500/10 p-2 rounded cursor-pointer transition-all group"
                                   onClick={() => setPrice(ask.px)}
                                 >
                                   <div 
@@ -1111,6 +1397,16 @@ export default function HypercoreOrderbook() {
                                   <span className="text-white/60 font-mono text-xs relative z-10">
                                     {total.toFixed(4)}
                                   </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleQuickSell(ask.px, ask.sz);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 bg-red-500 hover:bg-red-400 text-white px-2 py-1 rounded text-xs font-bold transition-all relative z-10"
+                                    title="Quick Sell"
+                                  >
+                                    SELL
+                                  </button>
                                 </motion.div>
                               );
                             })}
@@ -1129,10 +1425,11 @@ export default function HypercoreOrderbook() {
                             </span>
                           </h3>
                           <div className="space-y-1">
-                            <div className="grid grid-cols-3 text-xs text-gray-400 pb-2 border-b border-gray-700 sticky top-0 bg-[#0B1614]">
+                            <div className="grid grid-cols-4 text-xs text-gray-400 pb-2 border-b border-gray-700 sticky top-0 bg-[#0B1614]">
                               <span>Price (USDC)</span>
                               <span>Size ({selectedCoin})</span>
                               <span>Total</span>
+                              <span>Action</span>
                             </div>
                             {orderbook.levels[0].slice(0, 15).map((bid, idx) => {
                               const total = orderbook.levels[0].slice(0, idx + 1).reduce((sum, level) => sum + parseFloat(level.sz), 0);
@@ -1145,7 +1442,7 @@ export default function HypercoreOrderbook() {
                                   layout
                                   initial={{ opacity: 0, x: -10 }}
                                   animate={{ opacity: 1, x: 0 }}
-                                  className="relative grid grid-cols-3 text-sm hover:bg-green-500/10 p-2 rounded cursor-pointer transition-all group"
+                                  className="relative grid grid-cols-4 text-sm hover:bg-green-500/10 p-2 rounded cursor-pointer transition-all group"
                                   onClick={() => setPrice(bid.px)}
                                 >
                                   <div 
@@ -1161,6 +1458,16 @@ export default function HypercoreOrderbook() {
                                   <span className="text-white/60 font-mono text-xs relative z-10">
                                     {total.toFixed(4)}
                                   </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleQuickBuy(bid.px, bid.sz);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 bg-green-500 hover:bg-green-400 text-white px-2 py-1 rounded text-xs font-bold transition-all relative z-10"
+                                    title="Quick Buy"
+                                  >
+                                    BUY
+                                  </button>
                                 </motion.div>
                               );
                             })}
@@ -1386,6 +1693,31 @@ export default function HypercoreOrderbook() {
               </button>
 
               {/* Quick order buttons */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <button
+                  onClick={handleMarketBuy}
+                  disabled={!authenticated}
+                  className="py-3 px-4 bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-bold text-white transition-all"
+                  title="Market Buy"
+                >
+                  🚀 MARKET BUY
+                </button>
+                <button
+                  onClick={() => setSize('0.01')}
+                  className="py-2 px-3 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white transition-all"
+                >
+                  0.01
+                </button>
+                <button
+                  onClick={handleMarketSell}
+                  disabled={!authenticated}
+                  className="py-3 px-4 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-bold text-white transition-all"
+                  title="Market Sell"
+                >
+                  🔥 MARKET SELL
+                </button>
+              </div>
+
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => setSize('0.001')}
@@ -1465,6 +1797,18 @@ export default function HypercoreOrderbook() {
               <p className="text-gray-400">No balances available</p>
             )}
           </div>
+        </motion.div>
+      )}
+
+      {/* Transaction History */}
+      {authenticated && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="mt-6"
+        >
+          <TransactionHistory />
         </motion.div>
       )}
     </div>

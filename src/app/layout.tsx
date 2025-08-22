@@ -1,9 +1,11 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import React from "react";
 import Providers from "./providers";
 import PrivyWalletButton from "./components/PrivyWalletButton";
+import { NotificationProvider } from "./components/NotificationSystem";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,9 +58,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black min-h-screen flex flex-col`}
       >
         <Providers>
-          <TopBar />
-          <main className="flex-1 flex flex-col">{children}</main>
-          <Footer />
+          <NotificationProvider>
+            <TopBar />
+            <main className="flex-1 flex flex-col">{children}</main>
+            <Footer />
+          </NotificationProvider>
         </Providers>
       </body>
     </html>

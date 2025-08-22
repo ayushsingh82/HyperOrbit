@@ -6,6 +6,9 @@ import { motion } from 'framer-motion';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
          ComposedChart, Bar, PieChart, Pie, Cell, Line } from 'recharts';
 import { useMultiMarketData } from '../hooks/useHyperdriveContracts';
+import StrategyExecutionModal from './StrategyExecutionModal';
+import { useWeb3Trading, HyperdriveStrategyParams } from '../lib/web3Integration';
+import { useNotification } from './NotificationSystem';
 
 // Types for Yield Strategies
 interface YieldStrategy {
@@ -184,8 +187,10 @@ const RISK_COLORS = {
 };
 
 export default function HyperdriveYieldStrategies() {
-  const { ready, authenticated } = usePrivy();
-  const { marketsData, loading } = useMultiMarketData();
+  const { ready, authenticated, user } = usePrivy();
+  const { web3Provider, isConnected, userAddress } = useWeb3Trading();
+  const { addNotification } = useNotification();
+  const { marketsData, loading: marketLoading } = useMultiMarketData();
 
   const [userPositions, setUserPositions] = useState<StrategyPosition[]>([]);
   const [activeTab, setActiveTab] = useState<'strategies' | 'positions' | 'analytics'>('strategies');
@@ -205,12 +210,12 @@ export default function HyperdriveYieldStrategies() {
 
   // Debug real data loading
   useEffect(() => {
-    if (!loading && Object.keys(marketsData).length > 0) {
+    if (!marketLoading && Object.keys(marketsData).length > 0) {
       console.log('🔥 REAL MARKET DATA LOADED:', marketsData);
       console.log('📊 Market Keys:', Object.keys(marketsData));
       console.log('💰 Sample Market:', marketsData['HYPE-USDe']);
     }
-  }, [marketsData, loading]);
+  }, [marketsData, marketLoading]);
 
   // Calculate strategy metrics using real market data
   const strategyMetrics = useMemo(() => {
@@ -243,14 +248,80 @@ export default function HyperdriveYieldStrategies() {
   }, [marketsData]);
 
   const handleStrategySelect = useCallback((strategyId: string, strategyName: string) => {
+    console.log('🚀 Strategy selected:', strategyId, strategyName);
     setSelectedStrategy({ id: strategyId, name: strategyName });
     setShowExecutionModal(true);
+    console.log('✅ Modal should now be visible');
   }, []);
 
   const executeStrategy = useCallback(async (strategyId: string) => {
-    // Mock execution - replace with actual contract interaction
-    handleStrategySelect(strategyId, YIELD_STRATEGIES.find(s => s.id === strategyId)?.name || '');
-  }, [handleStrategySelect]);
+    if (!web3Provider || !isConnected) {
+      addNotification({
+        type: 'warning',
+        title: 'Real Trading Unavailable',
+        message: 'Web3 provider not connected. This would deploy a real Hyperdrive strategy in production.\n\nTo enable real strategy deployment:\n1. Connect to Arbitrum network\n2. Ensure proper wallet setup\n3. Have sufficient ETH/USDC balance'
+      });
+      // Fallback to modal for demo
+      handleStrategySelect(strategyId, YIELD_STRATEGIES.find(s => s.id === strategyId)?.name || '');
+      return;
+    }
+
+    try {
+      const strategy = YIELD_STRATEGIES.find(s => s.id === strategyId);
+      if (!strategy) return;
+
+      addNotification({
+        type: 'info',
+        title: 'Deploying Real Strategy...',
+        message: `🚀 Deploying ${strategy.name} on Hyperdrive protocol...\n\nThis is a REAL blockchain transaction!`,
+        duration: 5000
+      });
+
+      // Real strategy deployment parameters
+      const deploymentParams: HyperdriveStrategyParams = {
+        strategyType: strategy.riskLevel === 'Low' ? 'long' : 'short',
+        amount: strategy.minCollateral.toString(),
+        maturity: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+        slippage: 2 // 2% slippage tolerance
+      };
+
+      console.log('� REAL STRATEGY DEPLOYMENT:', deploymentParams);
+
+      const result = await web3Provider.deployHyperdriveStrategy(deploymentParams);
+
+      if (result.success) {
+        addNotification({
+          type: 'success',
+          title: 'Strategy Deployed Successfully! 🎉',
+          message: `✅ REAL ${strategy.name} deployed on Hyperdrive!\n\n📊 Deployment Details:\n- Strategy: ${strategy.name}\n- Position ID: ${result.positionId}\n- TX Hash: ${result.txHash}\n- Network: Arbitrum\n\n🔗 This is a real blockchain position!`,
+          duration: 12000
+        });
+
+        // Save real deployment data
+        const deployments = JSON.parse(localStorage.getItem('real-strategy-deployments') || '[]');
+        deployments.push({
+          strategyId,
+          strategyName: strategy.name,
+          deploymentParams,
+          result,
+          timestamp: Date.now(),
+          real: true
+        });
+        localStorage.setItem('real-strategy-deployments', JSON.stringify(deployments));
+
+      } else {
+        throw new Error(result.error || 'Strategy deployment failed');
+      }
+
+    } catch (error) {
+      console.error('Strategy deployment error:', error);
+      addNotification({
+        type: 'error',
+        title: 'Strategy Deployment Failed',
+        message: `Failed to deploy strategy: ${error instanceof Error ? error.message : 'Unknown error'}\n\nThis could be due to:\n- Insufficient balance\n- Network congestion\n- Invalid parameters`
+      });
+    }
+  }, [web3Provider, isConnected, addNotification, handleStrategySelect]);
 
   if (!ready) {
     return (
@@ -274,7 +345,7 @@ export default function HyperdriveYieldStrategies() {
   }
 
   // Show loading state for real data
-  if (loading) {
+  if (marketLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex items-center justify-center">
         <div className="text-center">
@@ -374,9 +445,8 @@ export default function HyperdriveYieldStrategies() {
             {YIELD_STRATEGIES.map((strategy) => (
               <motion.div
                 key={strategy.id}
-                className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10 hover:border-blue-400/50 transition-all cursor-pointer"
+                className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10 hover:border-blue-400/50 transition-all"
                 whileHover={{ scale: 1.02, y: -5 }}
-                onClick={() => handleStrategySelect(strategy.id, strategy.name)}
               >
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="text-xl font-bold text-white">{strategy.name}</h3>
@@ -426,9 +496,15 @@ export default function HyperdriveYieldStrategies() {
                 </div>
 
                 <button
-                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 rounded-lg transition-all"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔥 Deploy Strategy button clicked for:', strategy.name);
+                    executeStrategy(strategy.id);
+                  }}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium py-3 rounded-lg transition-all transform hover:scale-105 border-2 border-green-400/50"
                 >
-                  Deploy Strategy
+                  🚀 Deploy Strategy
                 </button>
               </motion.div>
             ))}
@@ -492,6 +568,27 @@ export default function HyperdriveYieldStrategies() {
           </div>
         )}
       </div>
+
+      {/* Strategy Execution Modal */}
+      {selectedStrategy && (
+        <StrategyExecutionModal
+          isOpen={showExecutionModal}
+          onClose={() => {
+            console.log('🔒 Closing modal');
+            setShowExecutionModal(false);
+            setSelectedStrategy(null);
+          }}
+          strategyId={selectedStrategy.id}
+          strategyName={selectedStrategy.name}
+        />
+      )}
+      
+      {/* Debug Info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black/80 text-white p-2 rounded text-xs">
+          Selected: {selectedStrategy?.name || 'None'} | Modal: {showExecutionModal ? 'Open' : 'Closed'}
+        </div>
+      )}
     </div>
   );
 }

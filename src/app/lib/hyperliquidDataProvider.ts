@@ -49,7 +49,17 @@ class HyperliquidDataProvider {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const responseText = await response.text();
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty response from Hyperliquid API');
+      }
+      
+      try {
+        return JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse Hyperliquid response:', parseError);
+        throw new Error('Invalid JSON response from Hyperliquid API');
+      }
     } catch (error) {
       console.error('Failed to fetch spot prices:', error);
       return {
@@ -77,7 +87,17 @@ class HyperliquidDataProvider {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const responseText = await response.text();
+      if (!responseText || responseText.trim() === '') {
+        return null;
+      }
+      
+      try {
+        return JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse metadata response:', parseError);
+        return null;
+      }
     } catch (error) {
       console.error('Failed to fetch metadata:', error);
       return null;

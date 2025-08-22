@@ -52,6 +52,21 @@ export default function StrategyExecutionModal({
     try {
       let result;
       
+      console.log('Executing strategy:', {
+        strategyId,
+        params,
+        user: 'authenticated'
+      });
+      
+      // Add strategy validation
+      if (!params.collateralAmount || parseFloat(params.collateralAmount) <= 0) {
+        throw new Error('Invalid collateral amount');
+      }
+      
+      if (params.leverage < 1 || params.leverage > 10) {
+        throw new Error('Leverage must be between 1x and 10x');
+      }
+      
       switch (strategyId) {
         case 'leveraged_liquid_staking':
           result = await executeLeveragedStaking(
@@ -90,6 +105,22 @@ export default function StrategyExecutionModal({
       if (result?.success) {
         setTxHash(result.hash);
         setCurrentStep('success');
+        
+        // Save successful strategy deployment
+        const deploymentRecord = {
+          strategyId,
+          strategyName,
+          params,
+          txHash: result.hash,
+          timestamp: Date.now(),
+          status: 'completed'
+        };
+        
+        const savedDeployments = JSON.parse(localStorage.getItem('strategy-deployments') || '[]');
+        savedDeployments.push(deploymentRecord);
+        localStorage.setItem('strategy-deployments', JSON.stringify(savedDeployments));
+        
+        console.log('Strategy deployed successfully:', deploymentRecord);
       } else {
         setCurrentStep('error');
       }
@@ -97,7 +128,7 @@ export default function StrategyExecutionModal({
       console.error('Strategy execution failed:', err);
       setCurrentStep('error');
     }
-  }, [strategyId, params, executeLeveragedStaking, executeRecursiveYieldFarming, executeDeltaNeutralStrategy, supplyAndBorrow]);
+  }, [strategyId, strategyName, params, executeLeveragedStaking, executeRecursiveYieldFarming, executeDeltaNeutralStrategy, supplyAndBorrow]);
 
   const calculateExpectedReturns = useCallback(() => {
     const amount = parseFloat(params.collateralAmount);
@@ -122,7 +153,12 @@ export default function StrategyExecutionModal({
 
   const returns = calculateExpectedReturns();
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    console.log('❌ StrategyExecutionModal: isOpen is false');
+    return null;
+  }
+
+  console.log('✅ StrategyExecutionModal: Rendering modal', { strategyId, strategyName, isOpen });
 
   return (
     <AnimatePresence>
@@ -361,22 +397,80 @@ export default function StrategyExecutionModal({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Strategy Executed Successfully!</h3>
-                <p className="text-gray-400 mb-4">Your yield strategy is now active</p>
+                <h3 className="text-xl font-semibold text-white mb-2">Strategy Deployed Successfully! 🎉</h3>
+                <p className="text-gray-400 mb-6">Your yield strategy is now active and earning</p>
+                
+                {/* Deployment Summary */}
+                <div className="bg-green-600/10 border border-green-400/20 rounded-lg p-4 mb-6 text-left">
+                  <h4 className="text-lg font-semibold text-green-300 mb-3">Deployment Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Strategy:</span>
+                      <span className="text-white">{strategyName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Collateral:</span>
+                      <span className="text-white">${params.collateralAmount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Leverage:</span>
+                      <span className="text-white">{params.leverage}x</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Market:</span>
+                      <span className="text-white">{params.market}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Expected APY:</span>
+                      <span className="text-green-400">{returns.leveragedAPY.toFixed(2)}%</span>
+                    </div>
+                  </div>
+                </div>
                 
                 {txHash && (
-                  <div className="bg-white/5 rounded-lg p-4 mb-4">
-                    <div className="text-sm text-gray-400 mb-1">Transaction Hash</div>
-                    <div className="text-sm font-mono text-blue-400 break-all">{txHash}</div>
+                  <div className="bg-white/5 rounded-lg p-4 mb-6">
+                    <div className="text-sm text-gray-400 mb-2">Transaction Hash</div>
+                    <div className="text-sm font-mono text-blue-400 break-all mb-3">{txHash}</div>
+                    <button
+                      onClick={() => {
+                        // Copy to clipboard
+                        navigator.clipboard.writeText(txHash);
+                        alert('Transaction hash copied to clipboard!');
+                      }}
+                      className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded transition-all"
+                    >
+                      Copy Hash
+                    </button>
                   </div>
                 )}
 
-                <button
-                  onClick={onClose}
-                  className="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-6 rounded-lg transition-all"
-                >
-                  View Position
-                </button>
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => {
+                      // Navigate to positions view
+                      onClose();
+                      // You could add router navigation here
+                    }}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-all"
+                  >
+                    View Position
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCurrentStep('config');
+                      setParams({
+                        collateralAmount: '1000',
+                        leverage: 2,
+                        market: 'HYPE-USDe',
+                        slippage: 0.5,
+                        deadline: 20
+                      });
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-all"
+                  >
+                    Deploy Another
+                  </button>
+                </div>
               </div>
             )}
 
