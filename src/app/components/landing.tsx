@@ -166,6 +166,88 @@ export default function Landing() {
             <div className="text-white/70 text-sm">Community Members</div>
           </div>
         </motion.div>
+
+        {/* Hypercore Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.8 }}
+          className="w-full max-w-6xl mt-20"
+        >
+          <div className="text-center mb-12">
+            <h2 className="text-4xl sm:text-5xl font-bold mb-6 text-[#27FEE0] tracking-tight">
+              ⚡ <span className="text-white">Hypercore</span>
+            </h2>
+            <p className="text-xl text-white/80 max-w-3xl mx-auto leading-relaxed">
+              Advanced cryptocurrency trading with real-time orderbooks, professional charts, and lightning-fast execution
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-gradient-to-br from-[#27FEE0]/10 to-transparent border border-[#27FEE0]/30 rounded-2xl p-6 text-center backdrop-blur-sm">
+              <div className="text-3xl mb-3">📊</div>
+              <h3 className="text-[#27FEE0] font-bold text-lg mb-2">Live Orderbooks</h3>
+              <p className="text-white/70 text-sm">Real-time bid/ask spreads with market depth visualization</p>
+            </div>
+            <div className="bg-gradient-to-br from-[#27FEE0]/10 to-transparent border border-[#27FEE0]/30 rounded-2xl p-6 text-center backdrop-blur-sm">
+              <div className="text-3xl mb-3">📈</div>
+              <h3 className="text-[#27FEE0] font-bold text-lg mb-2">Advanced Charts</h3>
+              <p className="text-white/70 text-sm">Professional trading charts with technical indicators</p>
+            </div>
+            <div className="bg-gradient-to-br from-[#27FEE0]/10 to-transparent border border-[#27FEE0]/30 rounded-2xl p-6 text-center backdrop-blur-sm">
+              <div className="text-3xl mb-3">⚡</div>
+              <h3 className="text-[#27FEE0] font-bold text-lg mb-2">Instant Execution</h3>
+              <p className="text-white/70 text-sm">Lightning-fast order placement and execution</p>
+            </div>
+          </div>
+          
+          <div className="text-center mt-8">
+            <a href="/hypercore" className="inline-block px-8 py-3 rounded-xl border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-lg transition-all duration-300 hover:scale-105 hover:bg-[#27FEE0] hover:text-[#0B1614]">
+              🚀 Trade on Hypercore
+            </a>
+          </div>
+        </motion.div>
+
+        {/* Hyperdrive Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 1.0 }}
+          className="w-full max-w-6xl mt-20"
+        >
+          <div className="text-center mb-12">
+            <h2 className="text-4xl sm:text-5xl font-bold mb-6 text-[#27FEE0] tracking-tight">
+              💰 <span className="text-white">Hyperdrive</span>
+            </h2>
+            <p className="text-xl text-white/80 max-w-3xl mx-auto leading-relaxed">
+              Automated yield strategies with smart contract integration and real-time performance tracking
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-gradient-to-br from-[#27FEE0]/10 to-transparent border border-[#27FEE0]/30 rounded-2xl p-6 text-center backdrop-blur-sm">
+              <div className="text-3xl mb-3">🎯</div>
+              <h3 className="text-[#27FEE0] font-bold text-lg mb-2">Smart Strategies</h3>
+              <p className="text-white/70 text-sm">AI-powered yield optimization and risk management</p>
+            </div>
+            <div className="bg-gradient-to-br from-[#27FEE0]/10 to-transparent border border-[#27FEE0]/30 rounded-2xl p-6 text-center backdrop-blur-sm">
+              <div className="text-3xl mb-3">📊</div>
+              <h3 className="text-[#27FEE0] font-bold text-lg mb-2">Real-Time Analytics</h3>
+              <p className="text-white/70 text-sm">Live APY tracking and performance metrics</p>
+            </div>
+            <div className="bg-gradient-to-br from-[#27FEE0]/10 to-transparent border border-[#27FEE0]/30 rounded-2xl p-6 text-center backdrop-blur-sm">
+              <div className="text-3xl mb-3">🔒</div>
+              <h3 className="text-[#27FEE0] font-bold text-lg mb-2">Secure DeFi</h3>
+              <p className="text-white/70 text-sm">Audited smart contracts with multi-sig security</p>
+            </div>
+          </div>
+          
+          <div className="text-center mt-8">
+            <a href="/yield-strategies" className="inline-block px-8 py-3 rounded-xl border-2 border-[#27FEE0] bg-transparent text-[#27FEE0] font-bold text-lg transition-all duration-300 hover:scale-105 hover:bg-[#27FEE0] hover:text-[#0B1614]">
+              🚀 Explore Strategies
+            </a>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
