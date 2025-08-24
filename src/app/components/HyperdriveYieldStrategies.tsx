@@ -349,7 +349,7 @@ export default function HyperdriveYieldStrategies() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#27FEE0] mx-auto mb-4"></div>
           <h2 className="text-2xl font-bold">Loading Real Market Data...</h2>
           <p className="text-gray-400 mt-2">Fetching live data from Hyperliquid APIs</p>
         </div>
@@ -358,12 +358,12 @@ export default function HyperdriveYieldStrategies() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-[#0B1614] to-slate-900 text-white p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#27FEE0] to-[#27FEE0]/80 bg-clip-text text-transparent">
               Hyperdrive Yield Strategies
             </h1>
             <div className="flex items-center space-x-2 bg-green-500/20 border border-green-500/30 rounded-full px-3 py-1">
@@ -396,7 +396,7 @@ export default function HyperdriveYieldStrategies() {
             whileHover={{ scale: 1.02 }}
           >
             <h3 className="text-sm text-gray-400 mb-2">Average APY</h3>
-            <div className="text-2xl font-bold text-blue-400">
+            <div className="text-2xl font-bold text-[#27FEE0]">
               {strategyMetrics.avgAPY.toFixed(1)}%
             </div>
           </motion.div>
@@ -406,7 +406,7 @@ export default function HyperdriveYieldStrategies() {
             whileHover={{ scale: 1.02 }}
           >
             <h3 className="text-sm text-gray-400 mb-2">Active Strategies</h3>
-            <div className="text-2xl font-bold text-purple-400">
+            <div className="text-2xl font-bold text-[#27FEE0]">
               {YIELD_STRATEGIES.filter(s => s.active).length}
             </div>
           </motion.div>
@@ -430,7 +430,7 @@ export default function HyperdriveYieldStrategies() {
               onClick={() => setActiveTab(tab as 'strategies' | 'positions' | 'analytics')}
               className={`px-6 py-3 rounded-lg font-medium transition-all ${
                 activeTab === tab 
-                  ? 'bg-blue-600 text-white' 
+                  ? 'bg-[#27FEE0] text-[#0B1614]' 
                   : 'bg-white/5 text-gray-300 hover:bg-white/10'
               }`}
             >
@@ -445,7 +445,7 @@ export default function HyperdriveYieldStrategies() {
             {YIELD_STRATEGIES.map((strategy) => (
               <motion.div
                 key={strategy.id}
-                className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10 hover:border-blue-400/50 transition-all"
+                className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10 hover:border-[#27FEE0]/50 transition-all"
                 whileHover={{ scale: 1.02, y: -5 }}
               >
                 <div className="flex justify-between items-start mb-4">
@@ -472,11 +472,11 @@ export default function HyperdriveYieldStrategies() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Max Leverage</span>
-                    <span className="text-purple-400 font-medium">{strategy.maxLeverage}x</span>
+                    <span className="text-[#27FEE0] font-medium">{strategy.maxLeverage}x</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">TVL</span>
-                    <span className="text-blue-400 font-medium">${calculateDynamicTVL(strategy.id, marketsData)}</span>
+                    <span className="text-[#27FEE0] font-medium">${calculateDynamicTVL(strategy.id, marketsData)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Participants</span>
@@ -488,7 +488,7 @@ export default function HyperdriveYieldStrategies() {
                   {strategy.markets.map((market) => (
                     <span 
                       key={market}
-                      className="px-2 py-1 bg-blue-600/20 text-blue-300 rounded text-xs"
+                      className="px-2 py-1 bg-[#27FEE0]/20 text-[#27FEE0] rounded text-xs"
                     >
                       {market}
                     </span>
@@ -502,7 +502,7 @@ export default function HyperdriveYieldStrategies() {
                     console.log('🔥 Deploy Strategy button clicked for:', strategy.name);
                     executeStrategy(strategy.id);
                   }}
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium py-3 rounded-lg transition-all transform hover:scale-105 border-2 border-green-400/50"
+                  className="w-full bg-gradient-to-r from-[#27FEE0] to-[#27FEE0]/80 hover:from-[#27FEE0]/90 hover:to-[#27FEE0]/70 text-[#0B1614] font-medium py-3 rounded-lg transition-all transform hover:scale-105 border-2 border-[#27FEE0]/50"
                 >
                   🚀 Deploy Strategy
                 </button>

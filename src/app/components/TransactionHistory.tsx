@@ -160,7 +160,7 @@ export default function TransactionHistory() {
                     </div>
                   ) : (
                     <div className="text-white">
-                      <span className="font-medium text-purple-400">
+                      <span className="font-medium text-[#27FEE0]">
                         {tx.strategyName}
                       </span>
                       {tx.deploymentCost && (

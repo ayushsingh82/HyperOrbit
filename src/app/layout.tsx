@@ -31,6 +31,8 @@ function TopBar() {
       <div className="flex items-center gap-4">
         <a href="/dao" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Explore DAO</a>
         <a href="/group" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Group</a>
+        <a href="/hypercore" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Hypercore</a>
+        <a href="/yield-strategies" className="px-4 py-2 rounded-lg bg-[#0B1614]/80 border border-[#27FEE0]/40 text-white/90 hover:text-[#27FEE0] hover:border-[#27FEE0] hover:bg-[#0B1614] transition-all duration-300 font-medium text-sm">Hyperdrive</a>
       </div>
       
       <PrivyWalletButton />

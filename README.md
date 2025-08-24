@@ -164,7 +164,7 @@ The **Hyperdrive** module offers sophisticated yield generation strategies throu
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/hyperorbit.git
+git clone https://github.com/ayushsingh82/HyperOrbit.git
 cd hyperorbit
 ```
 

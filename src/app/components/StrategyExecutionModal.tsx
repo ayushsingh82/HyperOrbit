@@ -347,11 +347,13 @@ export default function StrategyExecutionModal({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white/5 rounded-lg p-4">
                     <div className="text-sm text-gray-400">Collateral</div>
-                    <div className="text-xl font-bold text-white">{params.collateralAmount} {MARKET_CONFIGS[params.market].collateralAsset}</div>
+                    <div className="text-2xl font-bold text-[#27FEE0]">
+                      {params.collateralAmount} {MARKET_CONFIGS[params.market].collateralAsset}
+                    </div>
                   </div>
                   <div className="bg-white/5 rounded-lg p-4">
                     <div className="text-sm text-gray-400">Leverage</div>
-                    <div className="text-xl font-bold text-purple-400">{params.leverage}x</div>
+                    <div className="text-xl font-bold text-[#27FEE0]">{params.leverage}x</div>
                   </div>
                 </div>
 
