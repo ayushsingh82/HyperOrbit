@@ -81,7 +81,7 @@ export default function Landing() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-center mb-12"
+          className="text-center mb-12 mt-20"
         >
           <h1 className="text-5xl sm:text-7xl font-bold mb-6 text-[#27FEE0] tracking-tight leading-tight">
             Build Token

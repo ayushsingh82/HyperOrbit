@@ -98,8 +98,19 @@ export default function ExploreDaosPage() {
   }
 
   return (
-    <div className="flex flex-col items-center w-full min-h-screen bg-black py-16 px-6">
+    <div className="flex flex-col items-center w-full min-h-screen bg-black py-16 px-6 relative">
       <JoinModal open={modalOpen} dao={modalDao} onConfirm={handleConfirm} onCancel={handleCancel} />
+      
+      {/* Register DAO Button - Top Right */}
+      <div className="absolute top-8 right-8 z-10">
+        <a 
+          href="/register" 
+          className="px-6 py-3 rounded-xl border-2 border-[#27FEE0] bg-[#27FEE0] text-[#0B1614] font-bold text-lg shadow-lg transition-all duration-300 hover:scale-105 hover:bg-transparent hover:text-[#27FEE0] hover:shadow-[#27FEE0]/40"
+        >
+          🚀 Register DAO
+        </a>
+      </div>
+      
       <h1 className="text-4xl sm:text-5xl font-semibold mb-6 text-[#27FEE0] text-center tracking-wide">
         <span className="text-white">Explore</span> DAOs
       </h1>
