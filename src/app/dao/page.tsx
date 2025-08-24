@@ -137,12 +137,22 @@ export default function ExploreDaosPage() {
             </span>
             <div className="flex items-center justify-between w-full mt-auto">
               <span className="text-[#27FEE0] text-xs font-mono">{dao.members} members</span>
-              <button
-                className="px-5 py-1.5 rounded-lg border border-[#27FEE0] text-[#27FEE0] font-semibold text-sm transition hover:bg-[#27FEE0] hover:text-[#0B1614] ml-auto"
-                onClick={() => handleJoin(dao)}
-              >
-                Join
-              </button>
+              <div className="flex gap-2 ml-auto">
+                {dao.name === "ETH.hl" && (
+                  <a
+                    href="/group"
+                    className="px-3 py-1.5 rounded-lg border border-[#27FEE0] text-[#27FEE0] font-semibold text-sm transition hover:bg-[#27FEE0] hover:text-[#0B1614]"
+                  >
+                    Group Chat
+                  </a>
+                )}
+                <button
+                  className="px-5 py-1.5 rounded-lg border border-[#27FEE0] text-[#27FEE0] font-semibold text-sm transition hover:bg-[#27FEE0] hover:text-[#0B1614]"
+                  onClick={() => handleJoin(dao)}
+                >
+                  Join
+                </button>
+              </div>
             </div>
           </div>
         ))}

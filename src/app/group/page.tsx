@@ -2,9 +2,9 @@
 import React, { useRef, useState } from "react";
 
 const GROUP = {
-  name: "alpha.hl",
+  name: "Eth.hl",
   members: 128,
-  image: "https://api.dicebear.com/7.x/identicon/svg?seed=alpha",
+  image: "https://api.dicebear.com/7.x/identicon/svg?seed=eth",
 };
 
 const AVATAR_OPTIONS = [
@@ -17,7 +17,7 @@ const AVATAR_OPTIONS = [
 ];
 
 const INITIAL_MESSAGES = [
-  { id: 1, user: "Alice", avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=alice", text: "Hey everyone! Welcome to alpha.hl 🚀" },
+  { id: 1, user: "Alice", avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=alice", text: "Hey everyone! Welcome to Eth.hl 🚀" },
   { id: 2, user: "Bob", avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=bob", text: "Hi Alice! Glad to be here." },
   { id: 3, user: "Charlie", avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=charlie", text: "What's the next proposal about?" },
   { id: 4, user: "Alice", avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=alice", text: "We're voting on the new treasury allocation." },
