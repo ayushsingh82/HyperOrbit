@@ -18,14 +18,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Privy.hl",
-  description: "Build Token Communities",
+  title: "HyperOrbit",
+  description: "HyperOrbit - Community-driven token discussions and DeFi liquidation platform",
 };
 
 function TopBar() {
   return (
     <div className="w-full flex justify-between items-center px-8 py-4 z-10 relative">
-      <a href="/" className="text-xl font-bold text-[#27FEE0] tracking-tight select-none hover:text-white transition-colors cursor-pointer">Privy.hl</a>
+      <a href="/" className="text-2xl font-bold text-white hover:text-[#27FEE0] transition-colors cursor-pointer">HyperOrbit</a>
       
       {/* Centered Navigation */}
       <div className="flex items-center gap-4">
@@ -42,7 +42,7 @@ function TopBar() {
 function Footer() {
   return (
     <footer className="w-full flex items-center justify-center py-6 z-10 relative">
-      <span className="text-[#27FEE0] text-sm opacity-80">© {new Date().getFullYear()} Privy.hl. All rights reserved.</span>
+      <span className="text-[#27FEE0] text-sm opacity-80">© {new Date().getFullYear()} HyperOrbit. All rights reserved.</span>
     </footer>
   );
 }
