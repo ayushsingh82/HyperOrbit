@@ -27,9 +27,9 @@ export default function RegisterDaoPage() {
       <FloatingDots minDuration={3} maxDuration={7} />
       
       {/* Left Side - Form */}
-      <div className="w-full lg:w-96 lg:flex-shrink-0">
-        <div className="bg-[#0B1614]/90 border border-[#27FEE0]/50 rounded-2xl p-8 flex flex-col gap-6 shadow-lg z-10 h-full">
-          <h1 className="text-2xl sm:text-3xl font-medium mb-6 text-[#27FEE0] text-center lg:text-left tracking-wide">
+      <div className="w-full lg:w-80 lg:flex-shrink-0">
+        <div className="bg-[#0B1614]/90 border border-[#27FEE0]/50 rounded-2xl p-6 flex flex-col gap-4 shadow-lg z-10">
+          <h1 className="text-2xl sm:text-3xl font-medium mb-4 text-[#27FEE0] text-center lg:text-left tracking-wide">
             <span className="text-white">Register</span> DAO
           </h1>
           
@@ -40,7 +40,7 @@ export default function RegisterDaoPage() {
               {AVATAR_OPTIONS.map((avatar, index) => (
                 <div
                   key={index}
-                  className={`w-20 h-20 rounded-full border-2 cursor-pointer transition-all duration-200 ${
+                  className={`w-16 h-16 rounded-full border-2 cursor-pointer transition-all duration-200 ${
                     selectedAvatar === avatar
                       ? 'border-[#27FEE0] ring-2 ring-[#27FEE0]/50 scale-110'
                       : 'border-[#27FEE0]/40 hover:border-[#27FEE0]/70 hover:scale-105'
@@ -87,7 +87,7 @@ export default function RegisterDaoPage() {
           
           <button
             type="submit"
-            className="mt-auto px-8 py-3 rounded-lg border-2 border-[#27FEE0] bg-[#27FEE0] text-[#0B1614] font-bold text-lg transition hover:bg-transparent hover:text-[#27FEE0]"
+            className="mt-4 px-8 py-3 rounded-lg border-2 border-[#27FEE0] bg-[#27FEE0] text-[#0B1614] font-bold text-lg transition hover:bg-transparent hover:text-[#27FEE0]"
           >
             Register DAO
           </button>
@@ -107,7 +107,7 @@ export default function RegisterDaoPage() {
                 <p className="text-white text-sm mb-2">Preview for:</p>
                 <p className="text-[#27FEE0] font-mono text-xl font-bold">{daoName.replace(/\.hl$/, "")}.hl</p>
               </div>
-              <div className="flex-1 border border-[#27FEE0]/30 rounded-lg overflow-hidden bg-gray-900 min-h-[400px]">
+              <div className="flex-1 border border-[#27FEE0]/30 rounded-lg overflow-hidden bg-gray-900 min-h-[100px]">
                 <iframe
                   src={getPreviewUrl(daoName)}
                   className="w-full h-full bg-transparent"
