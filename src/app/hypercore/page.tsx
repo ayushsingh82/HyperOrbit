@@ -1,5 +1,6 @@
 import React from "react";
 import HypercoreOrderbook from "../components/HypercoreOrderbook";
+import HyperLendLiquidatorMVP from '../components/HyperLendLiquidatorMVP';
 
 export default function HypercorePage() {
   return (
@@ -10,10 +11,19 @@ export default function HypercorePage() {
             Hypercore Trading
           </h1>
           <p className="text-xl text-white/80 max-w-2xl mx-auto">
-            Experience lightning-fast perpetual trading with real-time orderbook data and seamless wallet integration
+            Experience lightning-fast perpetual trading with real-time orderbook data and automated liquidation flows
           </p>
         </div>
-        <HypercoreOrderbook />
+        
+        {/* Trading Section */}
+        <div className="mb-8">
+          <HypercoreOrderbook />
+        </div>
+        
+        {/* Liquidation Section */}
+        <div className="mb-8">
+          <HyperLendLiquidatorMVP />
+        </div>
       </div>
     </div>
   );

@@ -125,6 +125,11 @@ export default function HypercoreOrderbook() {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     try {
+      // Skip WebSocket on server-side rendering
+      if (typeof window === 'undefined') {
+        return;
+      }
+
       // Hyperliquid WebSocket endpoint
       wsRef.current = new WebSocket('wss://api.hyperliquid.xyz/ws');
       
@@ -159,10 +164,11 @@ export default function HypercoreOrderbook() {
       };
 
       wsRef.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.warn('WebSocket connection failed, using polling fallback');
+        // Don't log the error object as it may cause hydration issues
       };
     } catch (error) {
-      console.error('WebSocket connection error:', error);
+      console.warn('WebSocket unavailable, using polling fallback');
     }
   }, [selectedCoin]);
 
